@@ -21,6 +21,9 @@ function extractIdentity(kind, parts) {
   if (kind === 'raw' || kind === 'github') {
     owner = parts[0] || null;
     repo = parts[1] || null;
+    if (repo && repo.endsWith('.git')) {
+      repo = repo.slice(0, -4);
+    }
   } else if (kind === 'gist') {
     owner = parts[0] || null;
     gistId = parts[1] || null;
@@ -50,6 +53,8 @@ export function isAllowedPath(kind, parts) {
     if (rest[0] === 'archive') return true;
     if (rest[0] === 'tarball' || rest[0] === 'zipball') return true;
     if (rest[0] === 'releases' && rest[1] === 'download') return true;
+    if (rest[0] === 'info' && rest[1] === 'refs') return true;
+    if (rest[0] === 'git-upload-pack') return true;
     return false;
   }
   if (kind === 'api') {
@@ -117,6 +122,14 @@ function parseInput(input, bases) {
 export function getKindAndPathParts(input, bases = BASES) {
   const { kind, pathParts } = parseInput(input, bases);
   return { kind, pathParts };
+}
+
+export function isGitPath(parts = []) {
+  if (!Array.isArray(parts) || parts.length < 3) return false;
+  const rest = parts.slice(2);
+  if (rest[0] === 'info' && rest[1] === 'refs') return true;
+  if (rest[0] === 'git-upload-pack') return true;
+  return false;
 }
 
 export function parseTarget(input, bases = BASES) {

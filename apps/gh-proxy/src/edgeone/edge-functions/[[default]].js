@@ -9,11 +9,15 @@ export default async function onRequest(context) {
   const env = {
     ...baseEnv,
     AUTH_STATS: baseEnv.AUTH_STATS ?? globalEnv.AUTH_STATS,
-    GH_ALLOW_KV: baseEnv.GH_ALLOW_KV ?? globalEnv.GH_ALLOW_KV,
-    GH_TOKEN: baseEnv.GH_TOKEN ?? globalEnv.GH_TOKEN,
+    GH_ALLOW_RULES_KV: baseEnv.GH_ALLOW_RULES_KV ?? globalEnv.GH_ALLOW_RULES_KV,
+    GH_INJECT_TOKEN: baseEnv.GH_INJECT_TOKEN ?? globalEnv.GH_INJECT_TOKEN,
+    GH_API_TOKEN: baseEnv.GH_API_TOKEN ?? globalEnv.GH_API_TOKEN,
+    GH_INJECT_RULES: baseEnv.GH_INJECT_RULES ?? globalEnv.GH_INJECT_RULES,
     BASIC_AUTH: baseEnv.BASIC_AUTH ?? globalEnv.BASIC_AUTH
   };
-  const ghToken = env?.GH_TOKEN || '';
+  const ghInjectToken = env?.GH_INJECT_TOKEN || '';
+  const ghApiToken = env?.GH_API_TOKEN || '';
+  const injectRules = env?.GH_INJECT_RULES || '';
   const basicAuth = env?.BASIC_AUTH || '';
   const basicRealm = 'gh-proxy';
   const urlObj = new URL(request.url);
@@ -23,7 +27,9 @@ export default async function onRequest(context) {
     env,
     path: urlObj.pathname,
     search: urlObj.search,
-    ghToken,
+    ghInjectToken,
+    ghApiToken,
+    injectRules,
     basicAuth,
     basicRealm,
     statsHandler: handleStatsRequest,

@@ -21,7 +21,7 @@ export function parseOwners(value) {
 export const DEFAULT_OWNERS = [];
 
 export function resolveOwners(env, fallbackOwners = []) {
-	const envOwners = parseOwners(env?.GH_ALLOW);
+	const envOwners = parseOwners(env?.GH_ALLOW_RULES);
 	return [...fallbackOwners, ...envOwners];
 }
 
@@ -33,7 +33,7 @@ export async function loadAllowedOwners({
 	kvKey = "allow",
 } = {}) {
 	const now = Date.now();
-	const kvStore = kv || env?.GH_ALLOW_KV;
+	const kvStore = kv || env?.GH_ALLOW_RULES_KV;
 	const cacheKey = `${kvKey}:${defaultOwners.join(",")}:${Boolean(kvStore)}`;
 	if (cachedOwners && now - cachedAt < ttlMs && cacheKey === cachedKey) {
 		return cachedOwners;

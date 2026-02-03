@@ -81,7 +81,7 @@ export async function handleStatsRequest(req, env, cfg) {
 	if (!checkBasic(req, { basicAuth: cfg.basicAuth })) return unauthorized(cfg.basicRealm);
 	const clientInfo = getClientIpInfo(req);
 	const hasAuthKv = isKvStore(env?.AUTH_STATS);
-	const hasAllowKv = isKvStore(env?.GH_ALLOW_KV);
+	const hasAllowKv = isKvStore(env?.GH_ALLOW_RULES_KV);
 	const bindings = {
 		auth_stats: hasAuthKv,
 		gh_allow_kv: hasAllowKv,

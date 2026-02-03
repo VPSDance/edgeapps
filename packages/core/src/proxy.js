@@ -30,13 +30,39 @@ export function getUserInfoToken(input) {
 	return url.username;
 }
 
+function toBase64(value) {
+	if (typeof btoa === "function") return btoa(value);
+	if (typeof Buffer !== "undefined") {
+		return Buffer.from(value, "utf-8").toString("base64");
+	}
+	return "";
+}
+
+function buildAuthHeader(token, scheme) {
+	if (!token) return "";
+	if (scheme === "basic") {
+		const raw = token.includes(":") ? token : `x-access-token:${token}`;
+		const encoded = toBase64(raw);
+		return encoded ? `Basic ${encoded}` : "";
+	}
+	return `Bearer ${token}`;
+}
+
 const DEFAULT_PROXY_UA = "gh-proxy";
-const DEFAULT_HEADER_ALLOWLIST = [
+export const DEFAULT_HEADER_ALLOWLIST = [
 	"accept",
 	"range",
 	"if-none-match",
 	"if-modified-since",
 ];
+export const GIT_HEADER_ALLOWLIST = [
+	...DEFAULT_HEADER_ALLOWLIST,
+	"authorization",
+	"content-type",
+	"git-protocol",
+	"accept-encoding",
+];
+
 
 export function buildProxyHeaders(
 	req,
@@ -88,6 +114,7 @@ export function handleProxyRequest(
 	{
 		url,
 		authToken = "",
+		authScheme = "bearer",
 		injectToken = false,
 		token = "",
 		reqHeaders,
@@ -113,9 +140,12 @@ export function handleProxyRequest(
 		reqHeaders,
 	});
 	const tokenFromUrl = getUserInfoToken(url);
-	if (tokenFromUrl) headers.set("authorization", `Bearer ${tokenFromUrl}`);
-	if (!reqHdrRaw.has("authorization") && authToken) {
-		headers.set("authorization", `Bearer ${authToken}`);
+	const hasAuthHeader = reqHdrRaw.has("authorization");
+	if (!hasAuthHeader && tokenFromUrl) {
+		headers.set("authorization", buildAuthHeader(tokenFromUrl, authScheme));
+	}
+	if (!hasAuthHeader && !tokenFromUrl && authToken) {
+		headers.set("authorization", buildAuthHeader(authToken, authScheme));
 	}
 
 	const urlStr = url instanceof URL ? url.toString() : String(url || "");

@@ -11,7 +11,9 @@ export default {
 };
 
 async function onRequest(request, env) {
-  const ghToken = env?.GH_TOKEN || '';
+  const ghInjectToken = env?.GH_INJECT_TOKEN || '';
+  const ghApiToken = env?.GH_API_TOKEN || '';
+  const injectRules = env?.GH_INJECT_RULES || '';
   const basicAuth = env?.BASIC_AUTH || '';
   const basicRealm = 'gh-proxy';
   const urlObj = new URL(request.url);
@@ -21,7 +23,9 @@ async function onRequest(request, env) {
     env,
     path: urlObj.pathname,
     search: urlObj.search,
-    ghToken,
+    ghInjectToken,
+    ghApiToken,
+    injectRules,
     basicAuth,
     basicRealm,
     statsHandler: handleStatsRequest,
