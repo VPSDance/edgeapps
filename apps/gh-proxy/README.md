@@ -14,8 +14,8 @@ This app lives inside the Edgeapps monorepo.
 
 ```bash
 cd apps/gh-proxy
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
 Outputs:
@@ -26,7 +26,7 @@ Outputs:
 ## Release (build + publish)
 
 ```bash
-npm run release
+pnpm run release
 ```
 Run from `apps/gh-proxy` (or use workspace scripts from repo root).
 

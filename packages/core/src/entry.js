@@ -67,8 +67,7 @@ export async function handleProxyEntry({
       },
       auth: {
         ghToken,
-        basicAuth,
-        basicRealm
+        basicAuth
       },
       bases: ghBases,
       target,
@@ -132,8 +131,7 @@ export async function handleProxyEntry({
       },
       auth: {
         ghToken,
-        basicAuth,
-        basicRealm
+        basicAuth
       },
       bases: ghBases,
       target,

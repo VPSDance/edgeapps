@@ -11,12 +11,11 @@ export default async function onRequest(context) {
     AUTH_STATS: baseEnv.AUTH_STATS ?? globalEnv.AUTH_STATS,
     GH_ALLOW_KV: baseEnv.GH_ALLOW_KV ?? globalEnv.GH_ALLOW_KV,
     GH_TOKEN: baseEnv.GH_TOKEN ?? globalEnv.GH_TOKEN,
-    BASIC_AUTH: baseEnv.BASIC_AUTH ?? globalEnv.BASIC_AUTH,
-    BASIC_REALM: baseEnv.BASIC_REALM ?? globalEnv.BASIC_REALM
+    BASIC_AUTH: baseEnv.BASIC_AUTH ?? globalEnv.BASIC_AUTH
   };
   const ghToken = env?.GH_TOKEN || '';
   const basicAuth = env?.BASIC_AUTH || '';
-  const basicRealm = env?.BASIC_REALM || 'gh-proxy';
+  const basicRealm = 'gh-proxy';
   const urlObj = new URL(request.url);
 
   return handleProxyEntry({

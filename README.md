@@ -14,8 +14,8 @@ Functions.
 ## Quick start
 
 ```bash
-npm install
-npm --workspace apps/gh-proxy run build
+pnpm install
+pnpm --filter gh-proxy run build
 ```
 
 See each app's README for deploy and config details.

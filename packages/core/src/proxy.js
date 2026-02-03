@@ -155,6 +155,9 @@ export function tweakProxyHeaders(hdrs, pathname) {
 		"content-security-policy",
 		"content-security-policy-report-only",
 		"clear-site-data",
+		"x-proxy-upstream",
+		"x-proxy-final-url",
+		"x-proxy-status",
 	].forEach((k) => {
 		hdrs.delete(k);
 	});

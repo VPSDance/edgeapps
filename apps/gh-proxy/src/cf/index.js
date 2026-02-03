@@ -13,7 +13,7 @@ export default {
 async function onRequest(request, env) {
   const ghToken = env?.GH_TOKEN || '';
   const basicAuth = env?.BASIC_AUTH || '';
-  const basicRealm = env?.BASIC_REALM || 'gh-proxy';
+  const basicRealm = 'gh-proxy';
   const urlObj = new URL(request.url);
 
   return handleProxyEntry({
