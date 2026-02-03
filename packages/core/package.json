@@ -1,0 +1,15 @@
+{
+  "name": "@edgeapps/core",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "exports": {
+    "./entry": "./src/entry.js",
+    "./stats": "./src/stats.js",
+    "./landing": "./src/landing.js",
+    "./plugins": "./src/plugins.js",
+    "./platforms": "./src/platforms.js",
+    "./request": "./src/request.js",
+    "./kv": "./src/kv.js"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "gh-proxy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:watch": "node scripts/build.mjs --watch",
+    "clean": "rm -rf dist",
+    "release": "node scripts/deploy.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.2"
+  },
+  "dependencies": {
+    "@edgeapps/core": "workspace:*"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "edgeapps",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm --workspace apps/gh-proxy run build",
+    "build:watch": "npm --workspace apps/gh-proxy run build:watch",
+    "release": "npm --workspace apps/gh-proxy run release",
+    "clean": "npm --workspace apps/gh-proxy run clean"
+  }
+}
