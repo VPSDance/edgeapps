@@ -29,24 +29,41 @@ export async function authorizeTarget(
   if (!target.owner) {
     return { ok: false, reason: 'owner', kind: target.kind, pathParts: target.pathParts };
   }
-  if (allowedOwners.size > 0) {
-    const { repo, gistId } = target;
-    const entries = new Set();
-    if (target.owner) entries.add(target.owner);
-    if (repo && target.owner) entries.add(`${target.owner}/${repo}`);
-    if (gistId && target.owner) entries.add(`${target.owner}/${gistId}`);
-    const allowed = [...entries].some((entry) => allowedOwners.has(entry));
-    if (!allowed) {
-      return {
-        ok: false,
-        reason: 'owners',
-        kind: target.kind,
-        pathParts: target.pathParts,
-        owner: target.owner,
-        repo,
-        gistId
-      };
-    }
+  if (allowedOwners.has('*')) {
+    return {
+      ok: true,
+      kind: target.kind,
+      pathParts: target.pathParts,
+      owner: target.owner,
+      base: target.base,
+      upstreamUrl: target.upstreamUrl
+    };
+  }
+  if (allowedOwners.size === 0) {
+    return {
+      ok: false,
+      reason: 'owners',
+      kind: target.kind,
+      pathParts: target.pathParts,
+      owner: target.owner
+    };
+  }
+  const { repo, gistId } = target;
+  const entries = new Set();
+  if (target.owner) entries.add(target.owner);
+  if (repo && target.owner) entries.add(`${target.owner}/${repo}`);
+  if (gistId && target.owner) entries.add(`${target.owner}/${gistId}`);
+  const allowed = [...entries].some((entry) => allowedOwners.has(entry));
+  if (!allowed) {
+    return {
+      ok: false,
+      reason: 'owners',
+      kind: target.kind,
+      pathParts: target.pathParts,
+      owner: target.owner,
+      repo,
+      gistId
+    };
   }
 
   return {

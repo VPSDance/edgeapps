@@ -17,8 +17,8 @@ export function getRecordTtlSec() {
 }
 
 export async function getAuthRecord(env, ip) {
-	if (!isKvStore(env.AUTH_STATS)) return null;
-	const raw = await env.AUTH_STATS.get(AUTH_KV_PREFIX + ip);
+	if (!isKvStore(env.GH_KV)) return null;
+	const raw = await env.GH_KV.get(AUTH_KV_PREFIX + ip);
 	if (!raw) return null;
 	try {
 		return JSON.parse(raw);
@@ -33,7 +33,7 @@ export function isRecordBanned(rec, now = Date.now()) {
 }
 
 export async function recordAuthEvent(env, { ip, kind, path, auth }) {
-	if (!isKvStore(env.AUTH_STATS)) return null;
+	if (!isKvStore(env.GH_KV)) return null;
 	const now = Date.now();
 	const isFail = kind === "fail";
 	const windowMs = isFail
@@ -65,7 +65,7 @@ export async function recordAuthEvent(env, { ip, kind, path, auth }) {
 		bucket.banUntil = now + AUTH_BAN_TTL_MIN * 60 * 1000;
 	}
 	try {
-		await env.AUTH_STATS.put(AUTH_KV_PREFIX + ip, JSON.stringify(rec), {
+		await env.GH_KV.put(AUTH_KV_PREFIX + ip, JSON.stringify(rec), {
 			expirationTtl: getRecordTtlSec(),
 		});
 	} catch (err) {
@@ -76,21 +76,25 @@ export async function recordAuthEvent(env, { ip, kind, path, auth }) {
 
 export async function handleStatsRequest(req, env, cfg) {
 	const urlObj = new URL(req.url);
-	if (urlObj.pathname !== "/__/stats") return null;
+	if (urlObj.pathname !== "/_/status") return null;
+	if (!cfg?.basicAuth) {
+		return jsonResponse(
+			{ ok: false, error: "missing env BASIC_AUTH" },
+			500,
+		);
+	}
 
 	if (!checkBasic(req, { basicAuth: cfg.basicAuth })) return unauthorized(cfg.basicRealm);
 	const clientInfo = getClientIpInfo(req);
-	const hasAuthKv = isKvStore(env?.AUTH_STATS);
-	const hasAllowKv = isKvStore(env?.GH_ALLOW_RULES_KV);
+	const hasKv = isKvStore(env?.GH_KV);
 	const bindings = {
-		auth_stats: hasAuthKv,
-		gh_allow_kv: hasAllowKv,
+		gh_kv: hasKv,
 	};
-	if (!hasAuthKv) {
+	if (!hasKv) {
 		return jsonResponse(
 			{
 				ok: false,
-				error: "kv not bound",
+				error: "missing env GH_KV",
 				client_ip: clientInfo.ip,
 				client_ip_source: clientInfo.source,
 				...bindings,
@@ -106,14 +110,14 @@ export async function handleStatsRequest(req, env, cfg) {
 	const cursor = urlObj.searchParams.get("cursor");
 	const listOpts = { prefix: AUTH_KV_PREFIX, limit };
 	if (cursor) listOpts.cursor = cursor;
-	const listRes = await env.AUTH_STATS.list(listOpts);
+	const listRes = await env.GH_KV.list(listOpts);
 	const keys = normalizeKvKeys(listRes);
 
 	const now = Date.now();
 	const items = (
 		await Promise.all(
 			keys.map(async (name) => {
-				const raw = await env.AUTH_STATS.get(name);
+				const raw = await env.GH_KV.get(name);
 				if (!raw) return null;
 				try {
 					return JSON.parse(raw);

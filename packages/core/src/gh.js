@@ -47,6 +47,7 @@ export function isAllowedPath(kind, parts) {
     return parts.length >= 3 && parts[2] === 'raw';
   }
   if (kind === 'github') {
+    if (parts[0] === 'user-attachments') return parts.length >= 2;
     if (parts.length < 3) return false; // owner/repo/...
     const rest = parts.slice(2);
     if (rest[0] === 'raw') return true;

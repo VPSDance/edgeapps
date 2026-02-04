@@ -30,10 +30,10 @@ export async function loadAllowedOwners({
 	kv,
 	defaultOwners = [],
 	ttlMs = OWNERS_CACHE_TTL_MS,
-	kvKey = "allow",
+	kvKey = "allow_rules",
 } = {}) {
 	const now = Date.now();
-	const kvStore = kv || env?.GH_ALLOW_RULES_KV;
+	const kvStore = kv || env?.GH_KV;
 	const cacheKey = `${kvKey}:${defaultOwners.join(",")}:${Boolean(kvStore)}`;
 	if (cachedOwners && now - cachedAt < ttlMs && cacheKey === cachedKey) {
 		return cachedOwners;

@@ -57,8 +57,11 @@ export const DEFAULT_HEADER_ALLOWLIST = [
 ];
 export const GIT_HEADER_ALLOWLIST = [
 	...DEFAULT_HEADER_ALLOWLIST,
+	// Git smart HTTP POST may be gzip; keep encoding/length headers.
 	"authorization",
+	"content-encoding",
 	"content-type",
+	"content-length",
 	"git-protocol",
 	"accept-encoding",
 ];
@@ -81,6 +84,10 @@ export function buildProxyHeaders(
 		"upgrade",
 		"content-length",
 	]);
+	const allowContentLength =
+		Array.isArray(allowlist) &&
+		allowlist.some((name) => name.toLowerCase() === "content-length");
+	if (allowContentLength) skip.delete("content-length");
 	if (Array.isArray(allowlist) && allowlist.length) {
 		for (const name of allowlist) {
 			const key = name.toLowerCase();
@@ -115,12 +122,14 @@ export function handleProxyRequest(
 		url,
 		authToken = "",
 		authScheme = "bearer",
+		ignoreAuthHeader = false,
 		injectToken = false,
 		token = "",
 		reqHeaders,
 		userAgent,
 		allowlist = DEFAULT_HEADER_ALLOWLIST,
 		resHeaders,
+		onUpstreamError,
 	} = {},
 ) {
 	if (
@@ -140,9 +149,13 @@ export function handleProxyRequest(
 		reqHeaders,
 	});
 	const tokenFromUrl = getUserInfoToken(url);
-	const hasAuthHeader = reqHdrRaw.has("authorization");
+	const hasAuthHeader = ignoreAuthHeader ? false : reqHdrRaw.has("authorization");
 	if (!hasAuthHeader && tokenFromUrl) {
-		headers.set("authorization", buildAuthHeader(tokenFromUrl, authScheme));
+		const rawToken =
+			authScheme === "basic" && !tokenFromUrl.includes(":")
+				? `${tokenFromUrl}:`
+				: tokenFromUrl;
+		headers.set("authorization", buildAuthHeader(rawToken, authScheme));
 	}
 	if (!hasAuthHeader && !tokenFromUrl && authToken) {
 		headers.set("authorization", buildAuthHeader(authToken, authScheme));
@@ -150,6 +163,14 @@ export function handleProxyRequest(
 
 	const urlStr = url instanceof URL ? url.toString() : String(url || "");
 	const urlObj = url instanceof URL ? url : safeUrl(urlStr);
+	const defaultOnUpstreamError = (res) =>
+		textResponse(
+			res.status === 404 ? "Not Found" : "Upstream Error",
+			res.status,
+			resHeaders,
+		);
+	const upstreamErrorHandler =
+		onUpstreamError === undefined ? defaultOnUpstreamError : onUpstreamError;
 
 	return proxyRequest({
 		request,
@@ -159,12 +180,7 @@ export function handleProxyRequest(
 		token,
 		resHeaders,
 		tweakPathname: urlObj?.pathname || "",
-		onUpstreamError: (res) =>
-			textResponse(
-				res.status === 404 ? "Not Found" : "Upstream Error",
-				res.status,
-				resHeaders,
-			),
+		onUpstreamError: upstreamErrorHandler,
 	});
 }
 

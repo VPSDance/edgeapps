@@ -3,6 +3,8 @@
 GitHub proxy worker for Cloudflare Workers and EdgeOne Pages Functions.
 This app lives inside the Edgeapps monorepo.
 
+Languages: [English](README.md) | [中文](README.zh.md)
+
 ## Structure
 
 - Cloudflare: `src/cf/index.js`
@@ -35,81 +37,95 @@ Required env (short names):
 - CF_NAME, CF_TOKEN, CF_ACCOUNT
 
 Notes:
-- This script reads `.env` if present, then falls back to shell env vars.
-- Cloudflare deploy uses `wrangler.toml` (copy from `wrangler.toml.example`) and keeps Dashboard vars (`--keep-vars`).
-- Routes/custom domains are managed in the Cloudflare Dashboard (no routes in `wrangler.toml`).
+- This script reads `gh-proxy.env` if present (repo root or app dir), then falls back to shell env vars.
+- Cloudflare deploy uses the Script Upload API (keeps Dashboard bindings).
 - CF_ACCOUNT is your Cloudflare Account ID (find it in the dashboard URL `/accounts/<ACCOUNT_ID>` or in Workers & Pages overview).
 
-Examples:
+Example:
 
 ```bash
-APP_NAME=ghproxy EO_TOKEN=... CF_TOKEN=... CF_ACCOUNT=... npm run deploy
+EO_NAME=ghproxy EO_TOKEN=... CF_NAME=ghproxy CF_TOKEN=... CF_ACCOUNT=... pnpm run release
 ```
 
 Release options:
-- `--dry-run` (print commands, no exec; use `npm run release -- --dry-run`)
-- `-o cf|eo` (publish a single target; use `npm run release -- -o cf`)
+- `--dry-run` (print commands, no exec; use `pnpm run release -- --dry-run`)
+- `-o cf|eo` (publish a single target; use `pnpm run release -- -o cf`)
 
-## Quick Start
+## Config
 
-Minimal env:
-- GH_ALLOW_RULES (comma-separated allowlist; e.g. `owner,owner/repo`)
+Required:
+- GH_ALLOW_RULES: allowlist (comma-separated: `owner,owner/repo,owner/gistId`; `*` allows all). Also applies to `git clone`.
 
-Optional env:
-- GH_INJECT_TOKEN (used only when GH_INJECT_RULES matches)
-- GH_API_TOKEN
-- GH_INJECT_RULES (comma-separated; e.g. `owner,owner/repo,owner/gistId`)
-
-Example:
-```bash
-GH_ALLOW_RULES=owner,owner/repo,owner2
-GH_INJECT_TOKEN=ghp_xxx
-GH_API_TOKEN=ghp_yyy
-GH_INJECT_RULES=owner,owner/repo,owner/gistId,owner2/gistId2
-```
-
-## Proxy config (Cloudflare/EdgeOne)
-
-Env vars:
-- GH_INJECT_TOKEN: optional GitHub token for raw.githubusercontent.com and gist
-- GH_API_TOKEN: optional GitHub token for api.github.com
-- GH_INJECT_RULES: targets that auto-inject `GH_INJECT_TOKEN` (same format as GH_ALLOW_RULES)
-- GH_ALLOW_RULES: allowlist (comma-separated; e.g. `owner,owner/repo,owner/gistId`)
-- BASIC_AUTH: Basic auth in `user:pass` form (used for protected paths)
-- LANDING_HTML: optional HTML string for `/` (default `<a></a>`)
+Optional:
+- GH_INJECT_RULES: raw targets for token injection (same format as GH_ALLOW_RULES; `*` = all).
+- GH_INJECT_TOKEN: token used when `GH_INJECT_RULES` matches.
+- GH_API_TOKEN: token for api.github.com (reduces rate-limit/403/429).
+- BASIC_AUTH_RULES: targets that require Basic auth (same format as GH_ALLOW_RULES; `*` = all).
+- BASIC_AUTH: Basic auth in `user:pass` form (required if `BASIC_AUTH_RULES` is set).
+- LANDING_HTML: override landing HTML for `/`.
 
 KV bindings:
-- GH_ALLOW_RULES_KV: allowlist storage (key: `allow`, value same format as GH_ALLOW_RULES)
-- AUTH_STATS: auth stats/ban
+- GH_KV: optional allowlist storage (`allow_rules`) for large lists and auth stats/bans.
 
-Notes:
-- GH_ALLOW_RULES is case-sensitive; env size ~5 KB (few hundred owners; use GH_ALLOW_RULES_KV for large lists).
-- `git clone` is still restricted by `GH_ALLOW_RULES`.
+## Examples
 
-Behavior:
-- `GH_INJECT_RULES` uses the same target format as `GH_ALLOW_RULES`.
-- If `GH_INJECT_RULES` matches, raw requests use `GH_INJECT_TOKEN`.
-- Gist requests use `GH_INJECT_TOKEN` only when `GH_INJECT_RULES` matches.
-- API requests use `GH_API_TOKEN`.
-- `git clone` never uses env tokens (only client `Authorization` or `token@` in URL).
-- Incoming `Authorization` header always wins over injected token.
+Basic (allow specific owners):
+```bash
+GH_ALLOW_RULES=owner,owner2
+```
+
+Private repo access (server inject for raw):
+```bash
+GH_ALLOW_RULES=owner/private-repo
+GH_INJECT_RULES=owner/private-repo
+GH_INJECT_TOKEN=ghp_xxx
+```
+
+Basic auth gate (protect selected targets):
+```bash
+GH_ALLOW_RULES=owner
+BASIC_AUTH_RULES=owner/private-repo
+BASIC_AUTH=user:pass
+```
+Optional: set `GH_KV` to enable `/_/status` and auth failure tracking + bans (default: 5 fails/15 min → 24-hour ban).
 
 ## GH Proxy usage (EdgeOne/CF)
 
 - raw:
   https://<host>/raw/<owner>/<repo>/<ref>/<path>
   https://<host>/raw/<owner>/<repo>/refs/heads/<branch>/<path>
-  https://<host>/p/<owner>/<repo>/<ref>/<path>  (if `GH_INJECT_RULES` includes `owner/repo`)
+  https://<token>@<host>/raw/<owner>/<repo>/<ref>/<path>
+  https://<host>/https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>
 - api:
   https://<host>/api/repos/<owner>/<repo>/releases/latest
+  https://<host>/https://api.github.com/repos/<owner>/<repo>/releases/latest
 - gist:
   https://<host>/gist/<owner>/<gist_id>/raw/<file>
+  https://<host>/https://gist.githubusercontent.com/<owner>/<gist_id>/raw/<file>
 - github.com:
   https://<host>/<owner>/<repo>/raw/refs/heads/<branch>/<path>
   https://<host>/<owner>/<repo>/releases/download/<tag>/<file>
+  https://<host>/<owner>/<repo>/archive/refs/heads/<branch>.zip
+  https://<host>/<owner>/<repo>/archive/refs/tags/<tag>.tar.gz
+  https://<host>/https://github.com/<owner>/<repo>/raw/refs/heads/<branch>/<path>
+  https://<host>/https://github.com/<owner>/<repo>/archive/refs/heads/<branch>.zip
+  https://<host>/https://github.com/<owner>/<repo>/archive/refs/tags/<tag>.tar.gz
+
+- git:
   git clone https://<host>/<owner>/<repo>.git
   git clone https://<host>/<owner>/<repo>
+  git clone https://<token>@<host>/<owner>/<repo>.git
+  git clone https://<host>/https://github.com/<owner>/<repo>.git
 
-## Debug
+- attachments:
+  https://<host>/user-attachments/files/<id>/<file>
+  https://<host>/user-attachments/assets/<id>
+  https://<host>/https://github.com/user-attachments/files/<id>/<file>
+  https://<host>/https://github.com/user-attachments/assets/<id>
+  Note: add `user-attachments` (or `user-attachments/files`, `user-attachments/assets`) to `GH_ALLOW_RULES`.
 
-- `GET /ip` returns client IP with `x-ip-source` header.
+## Utility
+
+- `GET /_/status`: auth stats/ban info (requires `GH_KV` + `BASIC_AUTH`).
+- `GET /_/ip`: detected client IP (EdgeOne Pages: IPv6 not supported yet).
+- `GET /_/auth`: Basic auth ping for testing (requires `BASIC_AUTH`).

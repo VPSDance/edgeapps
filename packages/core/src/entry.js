@@ -6,13 +6,97 @@ import { forbidden, textResponse } from './http.js';
 import { renderLanding } from './landing.js';
 import { DEFAULT_OWNERS, parseOwners } from './owners.js';
 import {
+  DEFAULT_HEADER_ALLOWLIST,
   GIT_HEADER_ALLOWLIST,
+  getUserInfoToken,
   handleProxyRequest,
-  hasUserInfo,
   resolveAliasTarget
 } from './proxy.js';
 import { handlePluginRequest, handlePluginResponse } from '@edgeapps/core/plugins';
 import { getClientIpInfo } from './request.js';
+
+function mergeRules(base, extra) {
+  const out = [];
+  const seen = new Set();
+  for (const item of [...(base || []), ...(extra || [])]) {
+    const key = String(item || '').trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
+}
+
+function buildRuleSet(value) {
+  const entries = new Set();
+  for (const item of parseOwners(value)) {
+    entries.add(item);
+  }
+  return entries;
+}
+
+function matchesRuleSet(target, ruleSet) {
+  if (!ruleSet || ruleSet.size === 0) return false;
+  if (ruleSet.has('*')) return true;
+  const entries = new Set();
+  if (target?.owner) entries.add(target.owner);
+  if (target?.owner && target?.repo) entries.add(`${target.owner}/${target.repo}`);
+  if (target?.owner && target?.gistId) entries.add(`${target.owner}/${target.gistId}`);
+  return [...entries].some((entry) => ruleSet.has(entry));
+}
+
+function injectRawTokenUrl(urlStr, rawBase, token) {
+  if (!token || !urlStr) return urlStr;
+  try {
+    const url = new URL(urlStr);
+    const rawHost = new URL(rawBase).host;
+    if (url.host !== rawHost) return urlStr;
+    url.username = token;
+    url.password = '';
+    return url.toString();
+  } catch {
+    return urlStr;
+  }
+}
+
+function buildResolvedState({
+  env,
+  ghInjectToken,
+  ghApiToken,
+  injectRules,
+  basicRules,
+  extraTokenInject,
+  extraBasicRules,
+  pathRaw,
+  resolvedOverride
+}) {
+  const rawToken = ghInjectToken || env?.GH_INJECT_TOKEN || '';
+  const apiToken = ghApiToken || env?.GH_API_TOKEN || '';
+  const injectEntries = mergeRules(
+    parseOwners(injectRules || env?.GH_INJECT_RULES),
+    extraTokenInject
+  );
+  const basicEntries = mergeRules(
+    parseOwners(basicRules || env?.BASIC_AUTH_RULES),
+    extraBasicRules
+  );
+  const injectSet = buildRuleSet(injectEntries);
+  const basicSet = buildRuleSet(basicEntries);
+  const ghBases = buildGhBases();
+  const resolved = resolvedOverride || resolveAliasTarget(pathRaw, { bases: ghBases });
+  const target = parseTarget(resolved, ghBases);
+  const injectMatch = matchesRuleSet(target, injectSet);
+  const basicMatch = matchesRuleSet(target, basicSet);
+  return { rawToken, apiToken, ghBases, resolved, target, injectMatch, basicMatch };
+}
+
+function buildProxyAllowlist({ isGit, hasAuthHeader, requiresAuth }) {
+  if (isGit) return GIT_HEADER_ALLOWLIST;
+  if (hasAuthHeader && !requiresAuth) {
+    return [...DEFAULT_HEADER_ALLOWLIST, 'authorization'];
+  }
+  return DEFAULT_HEADER_ALLOWLIST;
+}
 
 export async function handleProxyEntry({
   request,
@@ -22,6 +106,7 @@ export async function handleProxyEntry({
   ghInjectToken = '',
   ghApiToken = '',
   injectRules = '',
+  basicRules = '',
   basicAuth = '',
   basicRealm = 'edgeapps',
   statsHandler,
@@ -46,7 +131,8 @@ export async function handleProxyEntry({
   if (!pathRaw) {
     return renderLanding(env);
   }
-  if (pathRaw === 'ip') {
+  const reqUserToken = getUserInfoToken(request.url);
+  if (pathRaw === '_/ip') {
     const info = getClientIpInfo(request);
     return new Response(info.ip, {
       status: 200,
@@ -57,61 +143,34 @@ export async function handleProxyEntry({
       }
     });
   }
-
-  function mergeTokenInject(base, extra) {
-    const out = [];
-    const seen = new Set();
-    for (const item of [...(base || []), ...(extra || [])]) {
-      const key = String(item || '').trim();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      out.push(key);
+  if (pathRaw === '_/auth') {
+    if (!basicAuth) {
+      return textResponse('Missing env BASIC_AUTH', 500);
     }
-    return out;
+    const authRes = await requireAuth(request, {
+      env,
+      path: pathRaw,
+      basicAuth,
+      basicRealm
+    });
+    if (!authRes.ok) return authRes.response;
+    return textResponse('OK', 200);
   }
 
-  function buildTokenInjectSet(value) {
-    const entries = new Set();
-    for (const item of parseOwners(value)) {
-      entries.add(item);
-    }
-    return entries;
-  }
-
-  function matchesTokenInject(target, injectSet) {
-    if (!injectSet || injectSet.size === 0) return false;
-    const entries = new Set();
-    if (target?.owner) entries.add(target.owner);
-    if (target?.owner && target?.repo) entries.add(`${target.owner}/${target.repo}`);
-    if (target?.owner && target?.gistId)
-      entries.add(`${target.owner}/${target.gistId}`);
-    return [...entries].some((entry) => injectSet.has(entry));
-  }
-
-  function injectRawTokenUrl(urlStr, rawBase, token) {
-    if (!token || !urlStr) return urlStr;
-    try {
-      const url = new URL(urlStr);
-      const rawHost = new URL(rawBase).host;
-      if (url.host !== rawHost) return urlStr;
-      url.username = token;
-      url.password = '';
-      return url.toString();
-    } catch {
-      return urlStr;
-    }
-  }
-
-  let rawToken = ghInjectToken || env?.GH_INJECT_TOKEN || '';
-  let apiToken = ghApiToken || env?.GH_API_TOKEN || '';
-  let injectEntries = parseOwners(injectRules || env?.GH_INJECT_RULES);
-  let injectSet = buildTokenInjectSet(injectEntries);
-  let ghBases = buildGhBases();
-  let resolved = resolveAliasTarget(pathRaw, { bases: ghBases });
-  let target = parseTarget(resolved, ghBases);
-  let injectMatch = matchesTokenInject(target, injectSet);
+  let { rawToken, apiToken, ghBases, resolved, target, injectMatch, basicMatch } =
+    buildResolvedState({
+      env,
+      ghInjectToken,
+      ghApiToken,
+      injectRules,
+      basicRules,
+      extraTokenInject: [],
+      extraBasicRules: [],
+      pathRaw
+    });
   let extraOwners = [];
   let extraTokenInject = [];
+  let extraBasicRules = [];
 
   if (handlePluginRequest) {
     const pluginRes = await handlePluginRequest({
@@ -139,14 +198,16 @@ export async function handleProxyEntry({
       if (pluginRes instanceof Response) return pluginRes;
       if (typeof pluginRes === 'object') {
         let needsRecalc = false;
-        let hasResolvedOverride = false;
+        let resolvedOverride = '';
         if (pluginRes.env && typeof pluginRes.env === 'object') {
           Object.assign(env, pluginRes.env);
           needsRecalc = true;
         }
         if (pluginRes.resolvedPath && typeof pluginRes.resolvedPath === 'string') {
           resolved = pluginRes.resolvedPath;
-          hasResolvedOverride = true;
+          resolvedOverride = pluginRes.resolvedPath;
+          // Recompute target/inject rules because alias changed the resolved path.
+          needsRecalc = true;
         }
         if (Array.isArray(pluginRes.extraOwners)) {
           extraOwners = extraOwners.concat(pluginRes.extraOwners);
@@ -155,20 +216,30 @@ export async function handleProxyEntry({
           extraTokenInject = parseOwners(pluginRes.extraTokenInject);
           needsRecalc = true;
         }
+        if (pluginRes.extraBasicRules) {
+          extraBasicRules = parseOwners(pluginRes.extraBasicRules);
+          needsRecalc = true;
+        }
         if (needsRecalc) {
-          rawToken = ghInjectToken || env?.GH_INJECT_TOKEN || '';
-          apiToken = ghApiToken || env?.GH_API_TOKEN || '';
-          injectEntries = mergeTokenInject(
-            parseOwners(injectRules || env?.GH_INJECT_RULES),
-            extraTokenInject
-          );
-          injectSet = buildTokenInjectSet(injectEntries);
-          ghBases = buildGhBases();
-          if (!hasResolvedOverride) {
-            resolved = resolveAliasTarget(pathRaw, { bases: ghBases });
-          }
-          target = parseTarget(resolved, ghBases);
-          injectMatch = matchesTokenInject(target, injectSet);
+          ({
+            rawToken,
+            apiToken,
+            ghBases,
+            resolved,
+            target,
+            injectMatch,
+            basicMatch
+          } = buildResolvedState({
+            env,
+            ghInjectToken,
+            ghApiToken,
+            injectRules,
+            basicRules,
+            extraTokenInject,
+            extraBasicRules,
+            pathRaw,
+            resolvedOverride
+          }));
         }
       }
     }
@@ -178,7 +249,10 @@ export async function handleProxyEntry({
   const auth = await authorizeTarget(resolved, { env, defaultOwners });
   if (!auth.ok || !auth.upstreamUrl) return forbidden();
 
-  const requiresAuth = hasUserInfo(auth.upstreamUrl);
+  if (basicMatch && !basicAuth) {
+    return textResponse('Missing env BASIC_AUTH', 500);
+  }
+  const requiresAuth = basicMatch;
   let issueToken = '';
   if (requiresAuth) {
     const authRes = await requireAuth(request, {
@@ -196,19 +270,23 @@ export async function handleProxyEntry({
     upstreamUrl = injectRawTokenUrl(upstreamUrl, ghBases.raw, rawToken);
   }
   const isGit = auth.kind === 'github' && isGitPath(auth.pathParts);
+  const hasAuthHeader = request.headers.has('authorization') && !requiresAuth;
+  const allowlist = buildProxyAllowlist({ isGit, hasAuthHeader, requiresAuth });
   const authToken =
     auth.kind === 'api'
       ? apiToken
-      : auth.kind === 'gist'
-        ? injectMatch
-          ? rawToken
-          : ''
+      : auth.kind === 'github'
+        ? reqUserToken
         : '';
+  const authScheme = auth.kind === 'raw' || isGit ? 'basic' : 'bearer';
   const response = await handleProxyRequest(request, {
     url: upstreamUrl,
     authToken,
-    authScheme: isGit ? 'basic' : 'bearer',
-    allowlist: isGit ? GIT_HEADER_ALLOWLIST : undefined,
+    authScheme,
+    ignoreAuthHeader: requiresAuth,
+    allowlist,
+    // Git needs upstream 401/403 + WWW-Authenticate to retry with credentials.
+    onUpstreamError: isGit ? null : undefined,
     injectToken: requiresAuth && Boolean(issueToken),
     token: issueToken
   });

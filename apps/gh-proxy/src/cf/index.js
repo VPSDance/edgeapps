@@ -14,6 +14,7 @@ async function onRequest(request, env) {
   const ghInjectToken = env?.GH_INJECT_TOKEN || '';
   const ghApiToken = env?.GH_API_TOKEN || '';
   const injectRules = env?.GH_INJECT_RULES || '';
+  const basicRules = env?.BASIC_AUTH_RULES || '';
   const basicAuth = env?.BASIC_AUTH || '';
   const basicRealm = 'gh-proxy';
   const urlObj = new URL(request.url);
@@ -26,6 +27,7 @@ async function onRequest(request, env) {
     ghInjectToken,
     ghApiToken,
     injectRules,
+    basicRules,
     basicAuth,
     basicRealm,
     statsHandler: handleStatsRequest,

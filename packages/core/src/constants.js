@@ -7,6 +7,6 @@ export const TOKEN_TTL_MIN = 60;
 // 认证统计与封禁规则
 export const AUTH_FAIL_TTL_DAYS = 7;
 export const AUTH_BAN_AFTER = 5;
-export const AUTH_BAN_WINDOW_MIN = 60;
-export const AUTH_BAN_TTL_MIN = 120;
+export const AUTH_BAN_WINDOW_MIN = 15;
+export const AUTH_BAN_TTL_MIN = 1440;
 export const AUTH_KV_PREFIX = 'auth:';
