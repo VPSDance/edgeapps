@@ -1,11 +1,8 @@
 node_modules/
 dist/
 .env
-.env.*
 gh-proxy-smoke.env
-gh-proxy-smoke.env.*
 gh-proxy.env
-gh-proxy.env.*
 .DS_Store
 .wrangler*
 **/.edgeone/**

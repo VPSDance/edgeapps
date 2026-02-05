@@ -12,11 +12,12 @@ Languages: [English](README.md) | [中文](README.zh.md)
 
 - `packages/core`: 共享的 proxy/auth/owners 逻辑。
 
-## 快速开始
+## 发布
 
 ```bash
-pnpm install
-pnpm --filter gh-proxy run build
+pnpm i
+pnpm -F gh-proxy run release --
 ```
+默认同时发布到 Cloudflare 与 EdgeOne；用 `-o cf|eo` 只发布单一目标（`cf`=Cloudflare，`eo`=EdgeOne）。
 
-部署与配置请查看各应用的 README。
+详细的部署与配置请查看各应用的 README。
