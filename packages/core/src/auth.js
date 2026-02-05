@@ -1,7 +1,7 @@
 const tokenEncoder = new TextEncoder();
 
 function tokenKey(basicPass) {
-  return basicPass || 'p';
+  return basicPass || 'edgeapps';
 }
 
 async function hashStr(str) {

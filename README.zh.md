@@ -15,9 +15,11 @@ Languages: [English](README.md) | [中文](README.zh.md)
 ## 发布
 
 ```bash
-pnpm i
+pnpm install
+cp apps/gh-proxy/gh-proxy.env.example ./gh-proxy.env
 pnpm -F gh-proxy run release --
 ```
+发布前编辑 `gh-proxy.env` 填入你的变量。
 默认同时发布到 Cloudflare 与 EdgeOne；用 `-o cf|eo` 只发布单一目标（`cf`=Cloudflare，`eo`=EdgeOne）。
 
 详细的部署与配置请查看各应用的 README。

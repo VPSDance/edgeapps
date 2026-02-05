@@ -253,7 +253,7 @@ export async function handleProxyEntry({
     return textResponse('Missing env BASIC_AUTH', 500);
   }
   const requiresAuth = basicMatch;
-  let issueToken = '';
+  let sessionToken = '';
   if (requiresAuth) {
     const authRes = await requireAuth(request, {
       env,
@@ -262,7 +262,7 @@ export async function handleProxyEntry({
       basicRealm
     });
     if (!authRes.ok) return authRes.response;
-    issueToken = authRes.token || '';
+    sessionToken = authRes.token || '';
   }
 
   let upstreamUrl = `${auth.upstreamUrl}${search || ''}`;
@@ -287,8 +287,8 @@ export async function handleProxyEntry({
     allowlist,
     // Git needs upstream 401/403 + WWW-Authenticate to retry with credentials.
     onUpstreamError: isGit ? null : undefined,
-    injectToken: requiresAuth && Boolean(issueToken),
-    token: issueToken
+    injectToken: requiresAuth && Boolean(sessionToken),
+    token: sessionToken
   });
 
   if (handlePluginResponse) {
@@ -311,8 +311,8 @@ export async function handleProxyEntry({
       proxy: {
         upstreamUrl,
         requiresAuth,
-        injectToken: requiresAuth && Boolean(issueToken),
-        issueToken,
+        injectToken: requiresAuth && Boolean(sessionToken),
+        sessionToken,
         authToken,
         kind: auth.kind,
         isGit

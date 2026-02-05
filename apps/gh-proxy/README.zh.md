@@ -27,9 +27,11 @@ pnpm run build
 ## 发布（构建 + 部署）
 
 ```bash
+cp gh-proxy.env.example ./gh-proxy.env
 pnpm run release
 ```
 在 `apps/gh-proxy` 下执行（或从仓库根目录用 workspace 脚本）。
+发布前编辑 `gh-proxy.env` 填入你的变量。
 
 必需环境变量（短名）:
 - EO_NAME, EO_TOKEN
@@ -38,12 +40,6 @@ pnpm run release
 说明:
 - 脚本会优先读取 `gh-proxy.env`（仓库根目录或 app 目录），否则使用当前 shell 的 env。
 - CF_ACCOUNT 为 Cloudflare 账号 ID（控制台 URL `/accounts/<ACCOUNT_ID>` 或 Workers & Pages 页面可见）。
-
-示例:
-
-```bash
-EO_NAME=ghproxy EO_TOKEN=... CF_NAME=ghproxy CF_TOKEN=... CF_ACCOUNT=... pnpm run release
-```
 
 发布选项:
 - `--dry-run`（只打印命令不执行；`pnpm run release -- --dry-run`）

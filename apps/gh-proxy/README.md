@@ -27,9 +27,11 @@ Outputs:
 ## Release (build + publish)
 
 ```bash
+cp gh-proxy.env.example ./gh-proxy.env
 pnpm run release
 ```
 Run from `apps/gh-proxy` (or use workspace scripts from repo root).
+Edit `gh-proxy.env` with your credentials before release.
 
 Required env (short names):
 - EO_NAME, EO_TOKEN
@@ -38,12 +40,6 @@ Required env (short names):
 Notes:
 - This script reads `gh-proxy.env` if present (repo root or app dir), then falls back to shell env vars.
 - CF_ACCOUNT is your Cloudflare Account ID (find it in the dashboard URL `/accounts/<ACCOUNT_ID>` or in Workers & Pages overview).
-
-Example:
-
-```bash
-EO_NAME=ghproxy EO_TOKEN=... CF_NAME=ghproxy CF_TOKEN=... CF_ACCOUNT=... pnpm run release
-```
 
 Release options:
 - `--dry-run` (print commands, no exec; use `pnpm run release -- --dry-run`)

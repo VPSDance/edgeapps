@@ -40,6 +40,6 @@ export async function requireAuth(req, {
     await recordAuthEvent(env, { ip, kind: 'ok', path, auth: attempted });
   }
 
-  const issueToken = tokenOk ? bearerToken : await buildToken({ basicPass: pass });
-  return { ok: true, token: issueToken };
+  const sessionToken = tokenOk ? bearerToken : await buildToken({ basicPass: pass });
+  return { ok: true, token: sessionToken };
 }
