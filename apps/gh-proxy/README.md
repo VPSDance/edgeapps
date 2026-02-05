@@ -37,7 +37,6 @@ Required env (short names):
 
 Notes:
 - This script reads `gh-proxy.env` if present (repo root or app dir), then falls back to shell env vars.
-- Cloudflare deploy uses the Script Upload API (keeps Dashboard bindings).
 - CF_ACCOUNT is your Cloudflare Account ID (find it in the dashboard URL `/accounts/<ACCOUNT_ID>` or in Workers & Pages overview).
 
 Example:
@@ -48,7 +47,7 @@ EO_NAME=ghproxy EO_TOKEN=... CF_NAME=ghproxy CF_TOKEN=... CF_ACCOUNT=... pnpm ru
 
 Release options:
 - `--dry-run` (print commands, no exec; use `pnpm run release -- --dry-run`)
-- `-o cf|eo` (publish a single target; use `pnpm run release -- -o cf`)
+- `-o cf|eo` (publish a single target; `cf` = Cloudflare, `eo` = EdgeOne; use `pnpm run release -- -o cf`)
 
 ## Config
 
@@ -56,15 +55,15 @@ Required:
 - GH_ALLOW_RULES: allowlist (comma-separated: `owner,owner/repo,owner/gistId`; `*` allows all). Also applies to `git clone`.
 
 Optional:
-- GH_INJECT_RULES: raw targets for token injection (same format as GH_ALLOW_RULES; `*` = all).
-- GH_INJECT_TOKEN: token used when `GH_INJECT_RULES` matches.
+- GH_INJECT_RULES: raw targets that should auto-attach `GH_INJECT_TOKEN` (private repos); same format as GH_ALLOW_RULES; `*` = all.
+- GH_INJECT_TOKEN: token auto-attached to raw requests when `GH_INJECT_RULES` matches.
 - GH_API_TOKEN: token for api.github.com (reduces rate-limit/403/429).
-- BASIC_AUTH_RULES: targets that require Basic auth (same format as GH_ALLOW_RULES; `*` = all).
-- BASIC_AUTH: Basic auth in `user:pass` form (required if `BASIC_AUTH_RULES` is set).
+- BASIC_AUTH_RULES: targets that require Basic auth (private access); same format as GH_ALLOW_RULES; `*` = all.
+- BASIC_AUTH: Basic auth credentials in `user:pass` format for `BASIC_AUTH_RULES` (required if `BASIC_AUTH_RULES` is set).
 - LANDING_HTML: override landing HTML for `/`.
 
 KV bindings:
-- GH_KV: optional allowlist storage (`allow_rules`) for large lists and auth stats/bans.
+- GH_KV: optional allowlist storage (`allow_rules`) for large lists and auth stats/bans; recommended when Basic Auth is enabled (auto-ban brute-force).
 
 ## Examples
 
@@ -73,7 +72,7 @@ Basic (allow specific owners):
 GH_ALLOW_RULES=owner,owner2
 ```
 
-Private repo access (server inject for raw):
+Private repo access (server attach token for raw):
 ```bash
 GH_ALLOW_RULES=owner/private-repo
 GH_INJECT_RULES=owner/private-repo
@@ -90,18 +89,19 @@ Optional: set `GH_KV` to enable `/_/status` and auth failure tracking + bans (de
 
 ## GH Proxy usage (EdgeOne/CF)
 
-- raw:
+```text
+raw:
   https://<host>/raw/<owner>/<repo>/<ref>/<path>
   https://<host>/raw/<owner>/<repo>/refs/heads/<branch>/<path>
   https://<token>@<host>/raw/<owner>/<repo>/<ref>/<path>
   https://<host>/https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>
-- api:
+api:
   https://<host>/api/repos/<owner>/<repo>/releases/latest
   https://<host>/https://api.github.com/repos/<owner>/<repo>/releases/latest
-- gist:
+gist:
   https://<host>/gist/<owner>/<gist_id>/raw/<file>
   https://<host>/https://gist.githubusercontent.com/<owner>/<gist_id>/raw/<file>
-- github.com:
+github.com:
   https://<host>/<owner>/<repo>/raw/refs/heads/<branch>/<path>
   https://<host>/<owner>/<repo>/releases/download/<tag>/<file>
   https://<host>/<owner>/<repo>/archive/refs/heads/<branch>.zip
@@ -109,21 +109,19 @@ Optional: set `GH_KV` to enable `/_/status` and auth failure tracking + bans (de
   https://<host>/https://github.com/<owner>/<repo>/raw/refs/heads/<branch>/<path>
   https://<host>/https://github.com/<owner>/<repo>/archive/refs/heads/<branch>.zip
   https://<host>/https://github.com/<owner>/<repo>/archive/refs/tags/<tag>.tar.gz
-
-- git:
+git:
   git clone https://<host>/<owner>/<repo>.git
   git clone https://<host>/<owner>/<repo>
   git clone https://<token>@<host>/<owner>/<repo>.git
   git clone https://<host>/https://github.com/<owner>/<repo>.git
-
-- attachments:
+attachments (requires GH_ALLOW_RULES includes user-attachments):
   https://<host>/user-attachments/files/<id>/<file>
   https://<host>/user-attachments/assets/<id>
   https://<host>/https://github.com/user-attachments/files/<id>/<file>
   https://<host>/https://github.com/user-attachments/assets/<id>
-  Note: add `user-attachments` (or `user-attachments/files`, `user-attachments/assets`) to `GH_ALLOW_RULES`.
+```
 
-## Utility
+## Internal Routes
 
 - `GET /_/status`: auth stats/ban info (requires `GH_KV` + `BASIC_AUTH`).
 - `GET /_/ip`: detected client IP (EdgeOne Pages: IPv6 not supported yet).

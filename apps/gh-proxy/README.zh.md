@@ -37,7 +37,6 @@ pnpm run release
 
 说明:
 - 脚本会优先读取 `gh-proxy.env`（仓库根目录或 app 目录），否则使用当前 shell 的 env。
-- Cloudflare 部署使用 Script Upload API（保留控制台绑定）。
 - CF_ACCOUNT 为 Cloudflare 账号 ID（控制台 URL `/accounts/<ACCOUNT_ID>` 或 Workers & Pages 页面可见）。
 
 示例:
@@ -48,7 +47,7 @@ EO_NAME=ghproxy EO_TOKEN=... CF_NAME=ghproxy CF_TOKEN=... CF_ACCOUNT=... pnpm ru
 
 发布选项:
 - `--dry-run`（只打印命令不执行；`pnpm run release -- --dry-run`）
-- `-o cf|eo`（只发布单一目标；`pnpm run release -- -o cf`）
+- `-o cf|eo`（只发布单一目标；`cf`=Cloudflare，`eo`=EdgeOne；`pnpm run release -- -o cf`）
 
 ## 配置
 
@@ -56,15 +55,15 @@ EO_NAME=ghproxy EO_TOKEN=... CF_NAME=ghproxy CF_TOKEN=... CF_ACCOUNT=... pnpm ru
 - GH_ALLOW_RULES: 允许列表（逗号分隔：`owner,owner/repo,owner/gistId`；`*` 表示放开所有）。也会限制 `git clone`。
 
 可选:
-- GH_INJECT_RULES: raw 目标的注入规则（格式同 GH_ALLOW_RULES；`*` 表示全部）。
-- GH_INJECT_TOKEN: 命中 GH_INJECT_RULES 时使用的 token。
+- GH_INJECT_RULES: raw 私有仓库的自动携带 `GH_INJECT_TOKEN` 规则（格式同 GH_ALLOW_RULES；`*` 表示全部）。
+- GH_INJECT_TOKEN: 命中 GH_INJECT_RULES 时自动携带的 raw token。
 - GH_API_TOKEN: api.github.com 的 token（减少 rate-limit/403/429）。
-- BASIC_AUTH_RULES: 需要 Basic 认证的目标（格式同 GH_ALLOW_RULES；`*` 表示全部）。
-- BASIC_AUTH: Basic 认证 `user:pass`（设置 BASIC_AUTH_RULES 时必须配置）。
+- BASIC_AUTH_RULES: 需要 Basic 认证的目标（适合私有访问；格式同 GH_ALLOW_RULES；`*` 表示全部）。
+- BASIC_AUTH: BASIC_AUTH_RULES 对应的 Basic 认证账号密码（格式 `user:pass`；设置 BASIC_AUTH_RULES 时必须配置）。
 - LANDING_HTML: 覆盖 `/` 首页 HTML。
 
 KV 绑定:
-- GH_KV: 可选的 allowlist 存储（key: `allow_rules`），以及 auth 统计/封禁。
+- GH_KV: 可选的 allowlist 存储（key: `allow_rules`），以及 auth 统计/封禁；开启 Basic Auth 时建议配置（可自动封禁暴力破解）。
 
 ## 示例
 
@@ -73,7 +72,7 @@ KV 绑定:
 GH_ALLOW_RULES=owner,owner2
 ```
 
-私有仓库（raw 服务端注入）:
+私有仓库（raw 服务端自动携带 token）:
 ```bash
 GH_ALLOW_RULES=owner/private-repo
 GH_INJECT_RULES=owner/private-repo
@@ -90,18 +89,19 @@ BASIC_AUTH=user:pass
 
 ## 使用（EdgeOne/CF）
 
-- raw:
+```text
+raw:
   https://<host>/raw/<owner>/<repo>/<ref>/<path>
   https://<host>/raw/<owner>/<repo>/refs/heads/<branch>/<path>
   https://<token>@<host>/raw/<owner>/<repo>/<ref>/<path>
   https://<host>/https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>
-- api:
+api:
   https://<host>/api/repos/<owner>/<repo>/releases/latest
   https://<host>/https://api.github.com/repos/<owner>/<repo>/releases/latest
-- gist:
+gist:
   https://<host>/gist/<owner>/<gist_id>/raw/<file>
   https://<host>/https://gist.githubusercontent.com/<owner>/<gist_id>/raw/<file>
-- github.com:
+github.com:
   https://<host>/<owner>/<repo>/raw/refs/heads/<branch>/<path>
   https://<host>/<owner>/<repo>/releases/download/<tag>/<file>
   https://<host>/<owner>/<repo>/archive/refs/heads/<branch>.zip
@@ -109,21 +109,19 @@ BASIC_AUTH=user:pass
   https://<host>/https://github.com/<owner>/<repo>/raw/refs/heads/<branch>/<path>
   https://<host>/https://github.com/<owner>/<repo>/archive/refs/heads/<branch>.zip
   https://<host>/https://github.com/<owner>/<repo>/archive/refs/tags/<tag>.tar.gz
-
-- git:
+git:
   git clone https://<host>/<owner>/<repo>.git
   git clone https://<host>/<owner>/<repo>
   git clone https://<token>@<host>/<owner>/<repo>.git
   git clone https://<host>/https://github.com/<owner>/<repo>.git
-
-- attachments:
+attachments（需要 GH_ALLOW_RULES 包含 user-attachments）:
   https://<host>/user-attachments/files/<id>/<file>
   https://<host>/user-attachments/assets/<id>
   https://<host>/https://github.com/user-attachments/files/<id>/<file>
   https://<host>/https://github.com/user-attachments/assets/<id>
-  说明：`GH_ALLOW_RULES` 需要包含 `user-attachments`（或 `user-attachments/files`、`user-attachments/assets`）。
+```
 
-## 工具
+## 内置路由
 
 - `GET /_/status`: 认证统计/封禁信息（需要 `GH_KV` + `BASIC_AUTH`）。
 - `GET /_/ip`: 返回客户端 IP（EdgeOne Pages 暂不支持 IPv6）。
