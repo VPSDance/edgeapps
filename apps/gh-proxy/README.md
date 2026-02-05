@@ -1,7 +1,6 @@
 # GH Proxy
 
 GitHub proxy worker for Cloudflare Workers and EdgeOne Pages Functions.
-This app lives inside the Edgeapps monorepo.
 
 Languages: [English](README.md) | [中文](README.zh.md)
 

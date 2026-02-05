@@ -1,15 +1,16 @@
 # Edgeapps
 
-Monorepo for small edge apps that run on Cloudflare Workers and EdgeOne Pages
-Functions.
+Languages: [English](README.md) | [中文](README.zh.md)
 
-## Apps
+A collection of edge applications powered by Cloudflare Workers and EdgeOne Pages.
 
-- `apps/gh-proxy`: GitHub proxy worker (CF + EdgeOne)
+## Applications
+
+- [`apps/gh-proxy`](apps/gh-proxy): GitHub proxy with edge acceleration for raw/api/git clone.
 
 ## Packages
 
-- `packages/core`: shared proxy/auth/owners logic
+- `packages/core`: shared proxy/auth/owners logic.
 
 ## Quick start
 
@@ -18,4 +19,4 @@ pnpm install
 pnpm --filter gh-proxy run build
 ```
 
-See each app's README for deploy and config details.
+See each app README for deploy and config details.

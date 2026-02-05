@@ -1,7 +1,6 @@
 # GH Proxy
 
 面向 Cloudflare Workers 与 EdgeOne Pages Functions 的 GitHub 代理。
-该应用位于 Edgeapps 单仓库中。
 
 语言: [English](README.md) | [中文](README.zh.md)
 
