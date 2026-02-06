@@ -12,6 +12,10 @@ A collection of edge applications powered by Cloudflare Workers and EdgeOne Page
 
 - `packages/core`: shared proxy/auth/owners logic.
 
+## Docs
+
+- [`docs/platform-limits.md`](docs/platform-limits.md): free vs paid limits for Cloudflare / EdgeOne / KV / D1 / Supabase.
+
 ## Release
 
 ```bash
