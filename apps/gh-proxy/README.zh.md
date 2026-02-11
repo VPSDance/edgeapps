@@ -28,7 +28,7 @@ pnpm run build
 
 ```bash
 cp gh-proxy.env.example ./gh-proxy.env
-pnpm run release
+pnpm release
 ```
 在 `apps/gh-proxy` 下执行（或从仓库根目录用 workspace 脚本）。
 发布前编辑 `gh-proxy.env` 填入你的变量。
@@ -42,8 +42,8 @@ pnpm run release
 - CF_ACCOUNT 为 Cloudflare 账号 ID（控制台 URL `/accounts/<ACCOUNT_ID>` 或 Workers & Pages 页面可见）。
 
 发布选项:
-- `--dry-run`（只打印命令不执行；`pnpm run release -- --dry-run`）
-- `-o cf|eo`（只发布单一目标；`cf`=Cloudflare，`eo`=EdgeOne；`pnpm run release -- -o cf`）
+- `--dry-run`（只打印命令不执行；`pnpm release -- --dry-run`）
+- `-o cf|eo`（只发布单一目标；`cf`=Cloudflare，`eo`=EdgeOne；`pnpm release -- -o cf`）
 
 ## 配置
 
@@ -99,10 +99,13 @@ gist:
   https://<host>/https://gist.githubusercontent.com/<owner>/<gist_id>/raw/<file>
 github.com:
   https://<host>/<owner>/<repo>/raw/refs/heads/<branch>/<path>
+  https://<host>/<owner>/<repo>/releases/latest
+  # releases/latest 会返回 302，且 Location 会重写到当前代理域名
   https://<host>/<owner>/<repo>/releases/download/<tag>/<file>
   https://<host>/<owner>/<repo>/archive/refs/heads/<branch>.zip
   https://<host>/<owner>/<repo>/archive/refs/tags/<tag>.tar.gz
   https://<host>/https://github.com/<owner>/<repo>/raw/refs/heads/<branch>/<path>
+  https://<host>/https://github.com/<owner>/<repo>/releases/latest
   https://<host>/https://github.com/<owner>/<repo>/archive/refs/heads/<branch>.zip
   https://<host>/https://github.com/<owner>/<repo>/archive/refs/tags/<tag>.tar.gz
 git:

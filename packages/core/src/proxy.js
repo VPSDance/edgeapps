@@ -17,6 +17,38 @@ export function safeUrl(urlStr, base) {
 	}
 }
 
+function joinPathWithQuery(urlObj) {
+	if (!urlObj) return "";
+	return `${urlObj.pathname || ""}${urlObj.search || ""}${urlObj.hash || ""}`;
+}
+
+function getBaseHost(baseUrl) {
+	const urlObj = safeUrl(baseUrl || "");
+	return urlObj ? urlObj.host : "";
+}
+
+export function rewriteRedirectLocation(location, { requestUrl, currentUrl, bases } = {}) {
+	const reqUrl = requestUrl instanceof URL ? requestUrl : safeUrl(String(requestUrl || ""));
+	if (!reqUrl) return "";
+	const nextUrl =
+		location instanceof URL
+			? location
+			: safeUrl(String(location || ""), currentUrl instanceof URL ? currentUrl : undefined);
+	if (!nextUrl) return "";
+
+	const githubHost = getBaseHost(bases?.github);
+	const rawHost = getBaseHost(bases?.raw);
+	const apiHost = getBaseHost(bases?.api);
+	const gistHost = getBaseHost(bases?.gist);
+	const suffix = joinPathWithQuery(nextUrl);
+
+	if (nextUrl.host === githubHost) return `${reqUrl.origin}${suffix}`;
+	if (nextUrl.host === rawHost) return `${reqUrl.origin}/raw${suffix}`;
+	if (nextUrl.host === apiHost) return `${reqUrl.origin}/api${suffix}`;
+	if (nextUrl.host === gistHost) return `${reqUrl.origin}/gist${suffix}`;
+	return nextUrl.href;
+}
+
 export function hasUserInfo(input) {
 	const url = input instanceof URL ? input : safeUrl(String(input || ""));
 	if (!url) return false;
@@ -120,11 +152,14 @@ export function handleProxyRequest(
 	request,
 	{
 		url,
+		bases,
 		authToken = "",
 		authScheme = "bearer",
 		ignoreAuthHeader = false,
 		injectToken = false,
 		token = "",
+		returnRedirect = false,
+		rewriteRedirectToProxy = false,
 		reqHeaders,
 		userAgent,
 		allowlist = DEFAULT_HEADER_ALLOWLIST,
@@ -175,9 +210,12 @@ export function handleProxyRequest(
 	return proxyRequest({
 		request,
 		url: urlObj,
+		bases,
 		headers,
 		injectToken,
 		token,
+		returnRedirect,
+		rewriteRedirectToProxy,
 		resHeaders,
 		tweakPathname: urlObj?.pathname || "",
 		onUpstreamError: upstreamErrorHandler,
@@ -238,9 +276,12 @@ export async function finalizeProxyResponse(
 export async function proxyRequest({
 	request,
 	url,
+	bases,
 	headers,
 	injectToken = false,
 	token = "",
+	returnRedirect = false,
+	rewriteRedirectToProxy = false,
 	resHeaders,
 	tweakPathname = "",
 	onUpstreamError,
@@ -278,12 +319,35 @@ export async function proxyRequest({
 		const location = resHdrNew.get("location");
 		const nextUrl = safeUrl(location, urlObj);
 		if (!nextUrl) return textResponse("bad redirect", 502);
+		if (returnRedirect) {
+			let nextLocation = nextUrl.href;
+			if (rewriteRedirectToProxy) {
+				nextLocation = rewriteRedirectLocation(nextUrl, {
+					requestUrl: request?.url,
+					currentUrl: urlObj,
+					bases,
+				});
+				if (!nextLocation) return textResponse("bad redirect", 502);
+			}
+			resHdrNew.set("location", nextLocation);
+			return finalizeProxyResponse(res, {
+				headers: resHdrNew,
+				tweakPathname,
+				injectToken,
+				token,
+				resHeaders,
+				stripBody: isHead,
+			});
+		}
 		return proxyRequest({
 			request,
 			url: nextUrl,
+			bases,
 			headers,
 			injectToken,
 			token,
+			returnRedirect,
+			rewriteRedirectToProxy,
 			resHeaders,
 			tweakPathname: nextUrl.pathname,
 			onUpstreamError,

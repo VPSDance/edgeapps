@@ -5,6 +5,8 @@ export const BASES = {
   github: 'https://github.com'
 };
 
+const GITHUB_RELEASE_SUBPATHS = new Set(['download', 'latest', 'tag']);
+
 function getBaseHosts(bases) {
   return {
     raw: new URL(bases.raw).host,
@@ -53,7 +55,7 @@ export function isAllowedPath(kind, parts) {
     if (rest[0] === 'raw') return true;
     if (rest[0] === 'archive') return true;
     if (rest[0] === 'tarball' || rest[0] === 'zipball') return true;
-    if (rest[0] === 'releases' && rest[1] === 'download') return true;
+    if (rest[0] === 'releases' && GITHUB_RELEASE_SUBPATHS.has(rest[1])) return true;
     if (rest[0] === 'info' && rest[1] === 'refs') return true;
     if (rest[0] === 'git-upload-pack') return true;
     return false;

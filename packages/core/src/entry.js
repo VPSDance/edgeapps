@@ -270,6 +270,10 @@ export async function handleProxyEntry({
     upstreamUrl = injectRawTokenUrl(upstreamUrl, ghBases.raw, rawToken);
   }
   const isGit = auth.kind === 'github' && isGitPath(auth.pathParts);
+  const isGithubReleaseLatest =
+    auth.kind === 'github' &&
+    auth.pathParts?.[2] === 'releases' &&
+    auth.pathParts?.[3] === 'latest';
   const hasAuthHeader = request.headers.has('authorization') && !requiresAuth;
   const allowlist = buildProxyAllowlist({ isGit, hasAuthHeader, requiresAuth });
   const authToken =
@@ -281,10 +285,13 @@ export async function handleProxyEntry({
   const authScheme = auth.kind === 'raw' || isGit ? 'basic' : 'bearer';
   const response = await handleProxyRequest(request, {
     url: upstreamUrl,
+    bases: ghBases,
     authToken,
     authScheme,
     ignoreAuthHeader: requiresAuth,
     allowlist,
+    returnRedirect: isGithubReleaseLatest,
+    rewriteRedirectToProxy: isGithubReleaseLatest,
     // Git needs upstream 401/403 + WWW-Authenticate to retry with credentials.
     onUpstreamError: isGit ? null : undefined,
     injectToken: requiresAuth && Boolean(sessionToken),

@@ -28,7 +28,7 @@ Outputs:
 
 ```bash
 cp gh-proxy.env.example ./gh-proxy.env
-pnpm run release
+pnpm release
 ```
 Run from `apps/gh-proxy` (or use workspace scripts from repo root).
 Edit `gh-proxy.env` with your credentials before release.
@@ -42,8 +42,8 @@ Notes:
 - CF_ACCOUNT is your Cloudflare Account ID (find it in the dashboard URL `/accounts/<ACCOUNT_ID>` or in Workers & Pages overview).
 
 Release options:
-- `--dry-run` (print commands, no exec; use `pnpm run release -- --dry-run`)
-- `-o cf|eo` (publish a single target; `cf` = Cloudflare, `eo` = EdgeOne; use `pnpm run release -- -o cf`)
+- `--dry-run` (print commands, no exec; use `pnpm release -- --dry-run`)
+- `-o cf|eo` (publish a single target; `cf` = Cloudflare, `eo` = EdgeOne; use `pnpm release -- -o cf`)
 
 ## Config
 
@@ -99,10 +99,13 @@ gist:
   https://<host>/https://gist.githubusercontent.com/<owner>/<gist_id>/raw/<file>
 github.com:
   https://<host>/<owner>/<repo>/raw/refs/heads/<branch>/<path>
+  https://<host>/<owner>/<repo>/releases/latest
+  # releases/latest returns 302 with Location rewritten to the current proxy host
   https://<host>/<owner>/<repo>/releases/download/<tag>/<file>
   https://<host>/<owner>/<repo>/archive/refs/heads/<branch>.zip
   https://<host>/<owner>/<repo>/archive/refs/tags/<tag>.tar.gz
   https://<host>/https://github.com/<owner>/<repo>/raw/refs/heads/<branch>/<path>
+  https://<host>/https://github.com/<owner>/<repo>/releases/latest
   https://<host>/https://github.com/<owner>/<repo>/archive/refs/heads/<branch>.zip
   https://<host>/https://github.com/<owner>/<repo>/archive/refs/tags/<tag>.tar.gz
 git:

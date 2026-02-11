@@ -81,6 +81,26 @@ run_curl() {
   fi
 }
 
+run_curl_location_contains() {
+  local name="$1"
+  local url="$2"
+  local expected="$3"
+  local masked
+  masked=$(mask "$url")
+  local headers
+  if ! headers=$(curl -sSI --max-time 30 "$url" | tr -d '\r'); then
+    fail "$name -> $masked (request failed)"
+    return
+  fi
+  local location
+  location=$(printf '%s\n' "$headers" | awk 'tolower($0) ~ /^location:[[:space:]]*/ {sub(/^[^:]+:[[:space:]]*/, ""); print; exit}')
+  if [ -n "$location" ] && [[ "$location" == *"$expected"* ]]; then
+    ok "$name -> $masked"
+  else
+    fail "$name -> $masked (location=${location:-none})"
+  fi
+}
+
 run_git_clone() {
   local name="$1"
   local url="$2"
@@ -148,6 +168,11 @@ for host in $(parse_csv "$HOST_LIST"); do
   run_curl "raw (refs)" "$HOST/raw/$PUB_OWNER/$PUB_REPO/refs/heads/$PUB_REF/$PUB_PATH"
   run_curl "api" "$HOST/api/repos/$PUB_OWNER/$PUB_REPO/releases/latest"
   run_curl "github raw" "$HOST/$PUB_OWNER/$PUB_REPO/raw/refs/heads/$PUB_REF/$PUB_PATH"
+  run_curl "github release latest" "$HOST/$PUB_OWNER/$PUB_REPO/releases/latest"
+  run_curl_location_contains \
+    "github release latest location rewrite" \
+    "$HOST/$PUB_OWNER/$PUB_REPO/releases/latest" \
+    "$HOST/$PUB_OWNER/$PUB_REPO/releases/tag/"
   run_curl "github archive" "$HOST/$PUB_OWNER/$PUB_REPO/archive/refs/heads/$PUB_REF.zip"
   if [ -n "$PUB_TAG" ]; then
     run_curl "github archive tag" "$HOST/$PUB_OWNER/$PUB_REPO/archive/refs/tags/$PUB_TAG.tar.gz"
@@ -160,6 +185,11 @@ for host in $(parse_csv "$HOST_LIST"); do
   run_curl "full raw" "$HOST/https://raw.githubusercontent.com/$PUB_OWNER/$PUB_REPO/$PUB_REF/$PUB_PATH"
   run_curl "full api" "$HOST/https://api.github.com/repos/$PUB_OWNER/$PUB_REPO/releases/latest"
   run_curl "full github" "$HOST/https://github.com/$PUB_OWNER/$PUB_REPO/raw/refs/heads/$PUB_REF/$PUB_PATH"
+  run_curl "full github release latest" "$HOST/https://github.com/$PUB_OWNER/$PUB_REPO/releases/latest"
+  run_curl_location_contains \
+    "full github release latest location rewrite" \
+    "$HOST/https://github.com/$PUB_OWNER/$PUB_REPO/releases/latest" \
+    "$HOST/$PUB_OWNER/$PUB_REPO/releases/tag/"
   run_curl "full github archive" "$HOST/https://github.com/$PUB_OWNER/$PUB_REPO/archive/refs/heads/$PUB_REF.zip"
   if [ -n "$PUB_TAG" ]; then
     run_curl "full github archive tag" "$HOST/https://github.com/$PUB_OWNER/$PUB_REPO/archive/refs/tags/$PUB_TAG.tar.gz"

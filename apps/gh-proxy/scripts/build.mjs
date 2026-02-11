@@ -6,6 +6,7 @@ import { existsSync, readdirSync, statSync } from 'fs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const coreRoot = resolve(root, '../../packages/core/src');
 const watch = process.argv.includes('--watch');
+const defaultPluginDir = resolve(root, '../../../private/plugins');
 
 function resolveOverlayPath(value) {
   if (!value) return '';
@@ -14,7 +15,10 @@ function resolveOverlayPath(value) {
   return resolve(base, value);
 }
 
-const pluginEnv = process.env.EDGEAPPS_PLUGIN || process.env.EDGEAPPS_OVERLAY || '';
+const pluginEnv =
+  process.env.EDGEAPPS_PLUGIN ||
+  process.env.EDGEAPPS_OVERLAY ||
+  (existsSync(defaultPluginDir) ? defaultPluginDir : '');
 const pluginPath = pluginEnv ? resolveOverlayPath(pluginEnv) : '';
 const pluginExists = pluginPath && existsSync(pluginPath);
 if (pluginEnv && !pluginExists) {
