@@ -1,9 +1,16 @@
 import { handleProxyEntry } from '@edgeapps/core/entry';
 import { handleStatsRequest } from '@edgeapps/core/stats';
+import { serveEdgeOneStaticAsset } from '@edgeapps/core/static-assets';
 import { APP_NAME, PLATFORM_EO } from '../../meta.js';
 
 export default async function onRequest(context) {
   const { request } = context;
+  const staticRes = await serveEdgeOneStaticAsset(context);
+  if (staticRes) {
+    return staticRes;
+  }
+  const urlObj = new URL(request.url);
+
   const baseEnv = context?.env || {};
   const globalEnv = globalThis || {};
   const env = {
@@ -21,7 +28,6 @@ export default async function onRequest(context) {
   const basicRules = env?.BASIC_AUTH_RULES || '';
   const basicAuth = env?.BASIC_AUTH || '';
   const basicRealm = 'gh-proxy';
-  const urlObj = new URL(request.url);
 
   return handleProxyEntry({
     request,

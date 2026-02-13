@@ -1,10 +1,11 @@
 import { build, context } from 'esbuild';
 import { resolve, dirname, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync, readdirSync, statSync } from 'fs';
+import { existsSync, readdirSync, statSync, rmSync, mkdirSync, cpSync } from 'fs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const coreRoot = resolve(root, '../../packages/core/src');
+const publicDir = resolve(root, 'public');
 const watch = process.argv.includes('--watch');
 const defaultPluginDir = resolve(root, '../../../private/plugins');
 
@@ -102,40 +103,36 @@ export async function handlePluginResponse(ctx) {
 `;
 }
 
-const options = {
-  entryPoints: [
-    'src/cf/index.js',
-    'src/edgeone/edge-functions/[[default]].js',
-    'src/edgeone/edge-functions/index.js'
-  ],
-  outdir: 'dist',
-  outbase: 'src',
+function getPlugins() {
+  if (!pluginEntries.length) return [];
+  return [
+    {
+      name: 'plugin-alias',
+      setup(build) {
+        build.onResolve({ filter: /^@edgeapps\/core\/plugins$/ }, () => ({
+          path: 'edgeapps-plugin:entry',
+          namespace: 'edgeapps-plugin'
+        }));
+        build.onResolve({ filter: /^@edgeapps\/core\/(.+)$/ }, (args) => ({
+          path: resolve(coreRoot, `${args.path.split('/').pop()}.js`)
+        }));
+        build.onResolve({ filter: /^edgeapps-plugin-file:/ }, (args) => ({
+          path: decodeURIComponent(
+            args.path.replace(/^edgeapps-plugin-file:/, '')
+          )
+        }));
+        build.onLoad({ filter: /.*/, namespace: 'edgeapps-plugin' }, () => ({
+          contents: buildPluginModule(pluginEntries),
+          loader: 'js'
+        }));
+      }
+    }
+  ];
+}
+
+const sharedOptions = {
   absWorkingDir: root,
-  plugins: pluginEntries.length
-    ? [
-        {
-          name: 'plugin-alias',
-          setup(build) {
-            build.onResolve({ filter: /^@edgeapps\/core\/plugins$/ }, () => ({
-              path: 'edgeapps-plugin:entry',
-              namespace: 'edgeapps-plugin'
-            }));
-            build.onResolve({ filter: /^@edgeapps\/core\/(.+)$/ }, (args) => ({
-              path: resolve(coreRoot, `${args.path.split('/').pop()}.js`)
-            }));
-            build.onResolve({ filter: /^edgeapps-plugin-file:/ }, (args) => ({
-              path: decodeURIComponent(
-                args.path.replace(/^edgeapps-plugin-file:/, '')
-              )
-            }));
-            build.onLoad({ filter: /.*/, namespace: 'edgeapps-plugin' }, () => ({
-              contents: buildPluginModule(pluginEntries),
-              loader: 'js'
-            }));
-          }
-        }
-      ]
-    : [],
+  plugins: getPlugins(),
   bundle: true,
   treeShaking: true,
   format: 'esm',
@@ -144,10 +141,54 @@ const options = {
   logLevel: 'info'
 };
 
+function copyPublicAssets(targetDir) {
+  if (!existsSync(publicDir)) return;
+  cpSync(publicDir, targetDir, { recursive: true });
+}
+
 if (watch) {
-  const ctx = await context(options);
-  await ctx.watch();
+  mkdirSync(resolve(root, 'dist/cf'), { recursive: true });
+  mkdirSync(resolve(root, 'dist/eo'), { recursive: true });
+  copyPublicAssets(resolve(root, 'dist/cf'));
+  copyPublicAssets(resolve(root, 'dist/eo'));
+
+  const cfCtx = await context({
+    ...sharedOptions,
+    entryPoints: ['src/cf/index.js'],
+    outfile: 'dist/cf/_worker.js'
+  });
+  const eoCtx = await context({
+    ...sharedOptions,
+    entryPoints: [
+      'src/edgeone/edge-functions/[[default]].js',
+      'src/edgeone/edge-functions/index.js'
+    ],
+    outdir: 'dist/eo/edge-functions',
+    outbase: 'src/edgeone/edge-functions'
+  });
+  await cfCtx.watch();
+  await eoCtx.watch();
   console.log('watching...');
 } else {
-  await build(options);
+  rmSync(resolve(root, 'dist'), { recursive: true, force: true });
+  mkdirSync(resolve(root, 'dist/cf'), { recursive: true });
+  mkdirSync(resolve(root, 'dist/eo/edge-functions'), { recursive: true });
+  copyPublicAssets(resolve(root, 'dist/cf'));
+  copyPublicAssets(resolve(root, 'dist/eo'));
+
+  await build({
+    ...sharedOptions,
+    entryPoints: ['src/cf/index.js'],
+    outfile: 'dist/cf/_worker.js'
+  });
+
+  await build({
+    ...sharedOptions,
+    entryPoints: [
+      'src/edgeone/edge-functions/[[default]].js',
+      'src/edgeone/edge-functions/index.js'
+    ],
+    outdir: 'dist/eo/edge-functions',
+    outbase: 'src/edgeone/edge-functions'
+  });
 }

@@ -2,6 +2,7 @@
 
 import { handleProxyEntry } from '@edgeapps/core/entry';
 import { handleStatsRequest } from '@edgeapps/core/stats';
+import { serveCloudflareStaticAsset } from '@edgeapps/core/static-assets';
 import { APP_NAME, PLATFORM_CF } from '../meta.js';
 
 export default {
@@ -17,6 +18,10 @@ async function onRequest(request, env) {
   const basicRules = env?.BASIC_AUTH_RULES || '';
   const basicAuth = env?.BASIC_AUTH || '';
   const basicRealm = 'gh-proxy';
+  const staticRes = serveCloudflareStaticAsset(request, env);
+  if (staticRes) {
+    return staticRes;
+  }
   const urlObj = new URL(request.url);
 
   return handleProxyEntry({

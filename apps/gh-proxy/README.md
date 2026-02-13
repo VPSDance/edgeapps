@@ -9,7 +9,7 @@ Languages: [English](README.md) | [中文](README.zh.md)
 - Cloudflare: `src/cf/index.js`
 - EdgeOne (root landing): `src/edgeone/edge-functions/index.js`
 - EdgeOne (proxy): `src/edgeone/edge-functions/[[default]].js`
-- Build output: `dist/` (mirrors `src/` layout)
+- Build output: `dist/cf` + `dist/eo`
 
 ## Build
 
@@ -20,9 +20,11 @@ pnpm run build
 ```
 
 Outputs:
-- `dist/cf/index.js`
-- `dist/edgeone/edge-functions/index.js`
-- `dist/edgeone/edge-functions/[[default]].js`
+- `dist/cf/_worker.js`
+- `dist/cf/favicon.ico`
+- `dist/eo/edge-functions/index.js`
+- `dist/eo/edge-functions/[[default]].js`
+- `dist/eo/favicon.ico`
 
 ## Release (build + publish)
 
@@ -43,6 +45,7 @@ Notes:
 
 Release options:
 - `--dry-run` (print commands, no exec; use `pnpm release -- --dry-run`)
+- `--skip-build` (deploy existing dist only; use `pnpm release -- --skip-build`)
 - `-o cf|eo` (publish a single target; `cf` = Cloudflare, `eo` = EdgeOne; use `pnpm release -- -o cf`)
 
 ## Config

@@ -10,6 +10,7 @@
     "./plugins": "./src/plugins.js",
     "./platforms": "./src/platforms.js",
     "./request": "./src/request.js",
+    "./static-assets": "./src/static-assets.js",
     "./kv": "./src/kv.js",
     "./adapters/edgeone": "./src/adapters/edgeone.js",
     "./adapters/cloudflare": "./src/adapters/cloudflare.js"

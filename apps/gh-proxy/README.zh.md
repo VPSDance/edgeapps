@@ -9,7 +9,7 @@
 - Cloudflare: `src/cf/index.js`
 - EdgeOne（根首页）: `src/edgeone/edge-functions/index.js`
 - EdgeOne（代理入口）: `src/edgeone/edge-functions/[[default]].js`
-- 构建输出: `dist/`（与 `src/` 结构一致）
+- 构建输出: `dist/cf` + `dist/eo`
 
 ## 构建
 
@@ -20,9 +20,11 @@ pnpm run build
 ```
 
 输出:
-- `dist/cf/index.js`
-- `dist/edgeone/edge-functions/index.js`
-- `dist/edgeone/edge-functions/[[default]].js`
+- `dist/cf/_worker.js`
+- `dist/cf/favicon.ico`
+- `dist/eo/edge-functions/index.js`
+- `dist/eo/edge-functions/[[default]].js`
+- `dist/eo/favicon.ico`
 
 ## 发布（构建 + 部署）
 
@@ -43,6 +45,7 @@ pnpm release
 
 发布选项:
 - `--dry-run`（只打印命令不执行；`pnpm release -- --dry-run`）
+- `--skip-build`（仅部署已有 dist；`pnpm release -- --skip-build`）
 - `-o cf|eo`（只发布单一目标；`cf`=Cloudflare，`eo`=EdgeOne；`pnpm release -- -o cf`）
 
 ## 配置
