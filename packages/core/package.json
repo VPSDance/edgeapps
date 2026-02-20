@@ -6,6 +6,7 @@
   "exports": {
     "./entry": "./src/entry.js",
     "./stats": "./src/stats.js",
+    "./auth-guard": "./src/auth-guard.js",
     "./landing": "./src/landing.js",
     "./plugins": "./src/plugins.js",
     "./platforms": "./src/platforms.js",

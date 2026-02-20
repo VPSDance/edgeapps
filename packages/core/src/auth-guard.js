@@ -4,6 +4,20 @@ import { getClientIp } from './request.js';
 import { getAuthRecord, isRecordBanned, recordAuthEvent } from './stats.js';
 import { TOKEN_TTL_MIN } from './constants.js';
 
+/**
+ * @typedef {Object} RequireAuthOptions
+ * @property {any} [env]
+ * @property {string} [path]
+ * @property {string} [basicAuth]
+ * @property {string} [basicRealm]
+ * @property {number} [tokenTtlMinutes]
+ */
+
+/**
+ * Shared auth guard with optional auth-fail stats + auto-ban (via AUTH_KV).
+ * @param {Request} req
+ * @param {RequireAuthOptions} [options]
+ */
 export async function requireAuth(req, {
   env,
   path = '',

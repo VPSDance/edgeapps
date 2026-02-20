@@ -62,7 +62,8 @@ pnpm release
 - LANDING_HTML: 覆盖 `/` 首页 HTML。
 
 KV 绑定:
-- GH_KV: 可选的 allowlist 存储（key: `allow_rules`），以及 auth 统计/封禁；开启 Basic Auth 时建议配置（可自动封禁暴力破解）。
+- GH_KV: 可选的 allowlist 存储（key: `allow_rules`），用于大规则集。
+- AUTH_KV: 开启 `BASIC_AUTH_RULES` 时必需（用于认证失败统计与自动封禁）。
 
 ## 示例
 
@@ -84,7 +85,7 @@ GH_ALLOW_RULES=owner
 BASIC_AUTH_RULES=owner/private-repo
 BASIC_AUTH=user:pass
 ```
-可选: 设置 `GH_KV` 以启用 `/_/status` 与认证失败统计/封禁（默认：15 分钟内 5 次失败 → 封禁 24 小时）。
+开启 `BASIC_AUTH_RULES` 时，请配置 `AUTH_KV` 以启用 `/_/status` 与认证失败统计/封禁（默认：15 分钟内 5 次失败 → 封禁 24 小时）。
 
 ## 使用（EdgeOne/CF）
 
@@ -125,6 +126,6 @@ attachments（需要 GH_ALLOW_RULES 包含 user-attachments）:
 
 ## 内置路由
 
-- `GET /_/status`: 认证统计/封禁信息（需要 `GH_KV` + `BASIC_AUTH`）。
+- `GET /_/status`: 认证统计/封禁信息（需要 `AUTH_KV` + `BASIC_AUTH`）。
 - `GET /_/ip`: 返回客户端 IP（EdgeOne Pages 暂不支持 IPv6）。
 - `GET /_/auth`: Basic 认证探测（测试用，需要 `BASIC_AUTH`）。

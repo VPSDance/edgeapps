@@ -9,6 +9,7 @@
 - ✅ 短链跳转 (KV 读取，0 次写入)
 - ✅ CRUD + 标签管理
 - ✅ Radix UI 管理界面
+- ✅ 管理员认证自动封禁（需配置 `AUTH_KV`）
 
 ## 部署
 
@@ -29,6 +30,7 @@ npx wrangler pages project create short-url --production-branch main
 | 类型 | 名称 | 说明 |
 |------|------|------|
 | KV | `SHORT_URL_KV` | 必需，存储链接数据 |
+| KV | `AUTH_KV` | 用于管理员认证失败统计与自动封禁 |
 | Env | `ADMIN_AUTH` | 格式 `用户名:密码` |
 | Env | `SHORT_CODE_LENGTH` | 默认 6 |
 
@@ -58,3 +60,4 @@ pnpm -F short-url release -- -o eo
 
 - 管理界面: `https://your-domain/_/admin`
 - 短链接: `https://your-domain/<code>`
+- 认证状态: `https://your-domain/_/status`（需要管理员 Basic 认证）

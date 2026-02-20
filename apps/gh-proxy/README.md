@@ -62,7 +62,8 @@ Optional:
 - LANDING_HTML: override landing HTML for `/`.
 
 KV bindings:
-- GH_KV: optional allowlist storage (`allow_rules`) for large lists and auth stats/bans; recommended when Basic Auth is enabled (auto-ban brute-force).
+- GH_KV: optional allowlist storage (`allow_rules`) for large lists.
+- AUTH_KV: required when `BASIC_AUTH_RULES` is enabled (auth fail stats + auto-ban).
 
 ## Examples
 
@@ -84,7 +85,7 @@ GH_ALLOW_RULES=owner
 BASIC_AUTH_RULES=owner/private-repo
 BASIC_AUTH=user:pass
 ```
-Optional: set `GH_KV` to enable `/_/status` and auth failure tracking + bans (default: 5 fails/15 min → 24-hour ban).
+When `BASIC_AUTH_RULES` is enabled, set `AUTH_KV` to enable `/_/status` and auth failure tracking + bans (default: 5 fails/15 min → 24-hour ban).
 
 ## GH Proxy usage (EdgeOne/CF)
 
@@ -125,6 +126,6 @@ attachments (requires GH_ALLOW_RULES includes user-attachments):
 
 ## Internal Routes
 
-- `GET /_/status`: auth stats/ban info (requires `GH_KV` + `BASIC_AUTH`).
+- `GET /_/status`: auth stats/ban info (requires `AUTH_KV` + `BASIC_AUTH`).
 - `GET /_/ip`: detected client IP (EdgeOne Pages: IPv6 not supported yet).
 - `GET /_/auth`: Basic auth ping for testing (requires `BASIC_AUTH`).

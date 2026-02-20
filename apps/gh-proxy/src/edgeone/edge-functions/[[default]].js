@@ -15,6 +15,7 @@ export default async function onRequest(context) {
   const globalEnv = globalThis || {};
   const env = {
     ...baseEnv,
+    AUTH_KV: baseEnv.AUTH_KV ?? globalEnv.AUTH_KV,
     GH_KV: baseEnv.GH_KV ?? globalEnv.GH_KV,
     GH_INJECT_TOKEN: baseEnv.GH_INJECT_TOKEN ?? globalEnv.GH_INJECT_TOKEN,
     GH_API_TOKEN: baseEnv.GH_API_TOKEN ?? globalEnv.GH_API_TOKEN,

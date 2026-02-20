@@ -9,6 +9,7 @@ URL shortening service for Cloudflare Pages and EdgeOne Pages.
 - ✅ Short link redirect (KV read, 0 writes)
 - ✅ CRUD + tag management
 - ✅ Radix UI admin interface
+- ✅ Admin auth auto-ban (requires `AUTH_KV`)
 
 ## Deployment
 
@@ -29,6 +30,7 @@ In Pages project Settings → Functions → Bindings:
 | Type | Name | Description |
 |------|------|-------------|
 | KV | `SHORT_URL_KV` | Required, stores link data |
+| KV | `AUTH_KV` | Required for admin auth fail stats + auto-ban |
 | Env | `ADMIN_AUTH` | Format `user:password` |
 | Env | `SHORT_CODE_LENGTH` | Default 6 |
 
@@ -64,3 +66,4 @@ pnpm -F short-url release -- -o eo
 
 - Admin UI: `https://your-domain/_/admin`
 - Short link: `https://your-domain/<code>`
+- Auth status: `https://your-domain/_/status` (requires admin basic auth)

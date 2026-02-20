@@ -5,6 +5,9 @@ import {
   getLink, getLinkUrl, createLink, updateLink, deleteLink, listLinks, getAllTags,
   type KVStore,
 } from '../app/lib/kv-store'
+import { requireAuth } from '@edgeapps/core/auth-guard'
+import { handleStatsRequest } from '@edgeapps/core/stats'
+import { isKvStore } from '@edgeapps/core/kv'
 import { getPluginAdminEntries, handlePluginRequest, handlePluginResponse } from '@edgeapps/core/plugins'
 import type { CreateLinkInput, UpdateLinkInput } from '../app/lib/types'
 
@@ -14,6 +17,7 @@ declare const __EDGEAPPS_PLATFORM__: 'cf' | 'eo'
 
 export type Bindings = {
   SHORT_URL_KV: KVStore
+  AUTH_KV?: KVStore            // auth fail stats + auto-ban records
   ASSETS?: { fetch: typeof fetch }  // CF Pages static assets
   ADMIN_AUTH?: string               // "user:pass"
   SHORT_CODE_LENGTH?: string        // default "6"
@@ -87,22 +91,23 @@ app.use('/_/*', async (c, next) => {
     return c.text('Admin auth not configured', 500)
   }
 
-  const auth = c.req.header('Authorization')
-  if (!auth || !auth.startsWith('Basic ')) {
-    c.header('WWW-Authenticate', 'Basic realm="Short URL Admin"')
-    return c.text('Unauthorized', 401)
+  if (!isKvStore(c.env.AUTH_KV)) {
+    return c.text('AUTH_KV binding is required for admin auth auto-ban', 500)
   }
 
-  try {
-    const decoded = atob(auth.slice(6))
-    if (decoded !== config.adminAuth) {
-      c.header('WWW-Authenticate', 'Basic realm="Short URL Admin"')
-      return c.text('Unauthorized', 401)
-    }
-  } catch {
-    c.header('WWW-Authenticate', 'Basic realm="Short URL Admin"')
-    return c.text('Unauthorized', 401)
+  const urlObj = new URL(c.req.url)
+  if (urlObj.pathname === '/_/status') {
+    await next()
+    return
   }
+
+  const authRes = await requireAuth(c.req.raw, {
+    env: c.env,
+    path: urlObj.pathname.replace(/^\/+/, ''),
+    basicAuth: config.adminAuth,
+    basicRealm: 'Short URL Admin'
+  })
+  if (!authRes.ok) return authRes.response
 
   await next()
 })
@@ -132,6 +137,17 @@ app.use('*', async (c, next) => {
 })
 
 // ---------- API routes ----------
+
+// GET /_/status (auth fail stats + ban status)
+app.get('/_/status', async (c) => {
+  const config = getConfig(c.env)
+  const res = await handleStatsRequest(c.req.raw, c.env, {
+    basicAuth: config.adminAuth,
+    basicRealm: 'Short URL Admin'
+  })
+  if (res) return res
+  return c.json({ ok: false, error: 'not_found' }, 404)
+})
 
 // GET /_/api/plugin/admin-entries
 app.get('/_/api/plugin/admin-entries', async (c) => {

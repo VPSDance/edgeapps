@@ -5,6 +5,7 @@ import { authorizeTarget } from './guard.js';
 import { forbidden, textResponse } from './http.js';
 import { renderLanding } from './landing.js';
 import { DEFAULT_OWNERS, parseOwners } from './owners.js';
+import { isKvStore } from './kv.js';
 import {
   DEFAULT_HEADER_ALLOWLIST,
   GIT_HEADER_ALLOWLIST,
@@ -98,6 +99,10 @@ function buildProxyAllowlist({ isGit, hasAuthHeader, requiresAuth }) {
   return DEFAULT_HEADER_ALLOWLIST;
 }
 
+function hasAuthKv(env) {
+  return isKvStore(env?.AUTH_KV);
+}
+
 export async function handleProxyEntry({
   request,
   env,
@@ -146,6 +151,9 @@ export async function handleProxyEntry({
   if (pathRaw === '_/auth') {
     if (!basicAuth) {
       return textResponse('Missing env BASIC_AUTH', 500);
+    }
+    if (!hasAuthKv(env)) {
+      return textResponse('Missing env AUTH_KV', 500);
     }
     const authRes = await requireAuth(request, {
       env,
@@ -255,6 +263,9 @@ export async function handleProxyEntry({
   const requiresAuth = basicMatch;
   let sessionToken = '';
   if (requiresAuth) {
+    if (!hasAuthKv(env)) {
+      return textResponse('Missing env AUTH_KV', 500);
+    }
     const authRes = await requireAuth(request, {
       env,
       path: pathRaw,
