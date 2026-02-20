@@ -7,7 +7,7 @@ Languages: [English](README.md) | [中文](README.zh.md)
 ## 应用
 
 - [`apps/gh-proxy`](apps/gh-proxy): GitHub 代理, 支持 raw/api/git clone 等加速.
-- [`apps/short-url`](apps/short-url): 短链服务, KV存储 + 可选D1统计.
+- [`apps/short-url`](apps/short-url): 短链服务, 默认纯 KV 存储.
 
 ## 包
 

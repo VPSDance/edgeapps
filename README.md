@@ -7,7 +7,7 @@ A collection of edge applications for Cloudflare Workers and EdgeOne Pages.
 ## Apps
 
 - [`apps/gh-proxy`](apps/gh-proxy): GitHub proxy with raw/api/git clone acceleration.
-- [`apps/short-url`](apps/short-url): URL shortener with KV storage + optional D1 stats.
+- [`apps/short-url`](apps/short-url): URL shortener with KV storage.
 
 ## Packages
 
