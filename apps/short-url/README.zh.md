@@ -54,11 +54,6 @@ pnpm -F short-url release -- -o eo
 - Cloudflare: `dist/cf`（`_worker.js` + 静态资源）
 - EdgeOne: `dist/eo`（`edge-functions` + 静态资源）
 
-> [!WARNING]
-> **EdgeOne Pages 兼容性**
-> 当前的 SSR 构建依赖 React Router 7 所需的 Node.js API（例如 `AsyncLocalStorage`），而 EdgeOne 标准运行时环境可能缺失这些 API，导致 500/545 错误。
-> **推荐使用 Cloudflare Pages**，因为它提供完整的 `nodejs_compat` 支持。
-
 ## 使用
 
 - 管理界面: `https://your-domain/_/admin`
