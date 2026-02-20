@@ -7,6 +7,7 @@ Languages: [English](README.md) | [中文](README.zh.md)
 ## 应用
 
 - [`apps/gh-proxy`](apps/gh-proxy): GitHub 代理, 支持 raw/api/git clone 等加速.
+- [`apps/short-url`](apps/short-url): 短链服务, KV存储 + 可选D1统计.
 
 ## 包
 
@@ -18,12 +19,25 @@ Languages: [English](README.md) | [中文](README.zh.md)
 
 ## 发布
 
+### gh-proxy
+
 ```bash
 pnpm install
-cp apps/gh-proxy/gh-proxy.env.example ./gh-proxy.env
-pnpm -F gh-proxy run release --
+cp edgeapps/apps/gh-proxy/gh-proxy.env.example ./gh-proxy.env
+# 编辑 gh-proxy.env 填入变量
+pnpm -F gh-proxy release
 ```
-发布前编辑 `gh-proxy.env` 填入你的变量.
-默认同时发布到 Cloudflare 与 EdgeOne;用 `-o cf|eo` 只发布单一目标(`cf`=Cloudflare, `eo`=EdgeOne).
+用 `-o cf|eo` 只发布单一目标.
+
+### short-url
+
+```bash
+pnpm install
+cp edgeapps/apps/short-url/short-url.env.example ./short-url.env
+# 编辑 short-url.env 填入变量
+pnpm -F short-url release
+```
+
+> 首次发布前需在 CF Dashboard 创建 Pages 项目并配置 KV 绑定和环境变量.
 
 详细的部署与配置请查看各应用的 README.

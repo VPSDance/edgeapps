@@ -1,0 +1,33 @@
+{
+  "name": "short-url",
+  "private": true,
+  "description": "Short URL service powered by Hono + React SPA",
+  "license": "MIT",
+  "sideEffects": false,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:web": "rsbuild build",
+    "clean": "rm -rf build dist",
+    "dev": "rsbuild dev",
+    "release": "node scripts/deploy.mjs",
+    "release:skip-build": "node scripts/deploy.mjs --skip-build",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@edgeapps/core": "workspace:*",
+    "@radix-ui/themes": "^3.2.0",
+    "hono": "^4.11.9",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router": "^7.1.3"
+  },
+  "devDependencies": {
+    "@rsbuild/core": "^1.7.3",
+    "@rsbuild/plugin-react": "^1.4.5",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "esbuild": "^0.27.0",
+    "typescript": "^5.7.2"
+  }
+}

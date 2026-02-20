@@ -1,8 +1,21 @@
+.DS_Store
 node_modules/
 dist/
+build/
+*.txt
+
+# React Router
+.react-router/
+
+# Cloudflare
+.dev.vars
+.mf
+.wrangler*
+
+# EdgeOne
+**/.edgeone/**
+
+# Env files
 .env
 gh-proxy-smoke.env
-gh-proxy.env
-.DS_Store
-.wrangler*
-**/.edgeone/**
+*.env

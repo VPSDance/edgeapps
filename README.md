@@ -2,28 +2,42 @@
 
 Languages: [English](README.md) | [中文](README.zh.md)
 
-A collection of edge applications powered by Cloudflare Workers and EdgeOne Pages.
+A collection of edge applications for Cloudflare Workers and EdgeOne Pages.
 
-## Applications
+## Apps
 
-- [`apps/gh-proxy`](apps/gh-proxy): GitHub proxy with edge acceleration for raw/api/git clone.
+- [`apps/gh-proxy`](apps/gh-proxy): GitHub proxy with raw/api/git clone acceleration.
+- [`apps/short-url`](apps/short-url): URL shortener with KV storage + optional D1 stats.
 
 ## Packages
 
-- `packages/core`: shared proxy/auth/owners logic.
+- `packages/core`: Shared proxy/auth/owners logic.
 
 ## Docs
 
-- [`docs/platform-limits.md`](docs/platform-limits.md): free vs paid limits for Cloudflare / EdgeOne / KV / D1 / Supabase.
+- [`docs/platform-limits.zh.md`](docs/platform-limits.zh.md): Cloudflare / EdgeOne / KV / D1 / Supabase free vs paid limits comparison.
 
 ## Release
 
+### gh-proxy
+
 ```bash
 pnpm install
-cp apps/gh-proxy/gh-proxy.env.example ./gh-proxy.env
-pnpm -F gh-proxy run release --
+cp edgeapps/apps/gh-proxy/gh-proxy.env.example ./gh-proxy.env
+# Edit gh-proxy.env with your values
+pnpm -F gh-proxy release
 ```
-Edit `gh-proxy.env` with your credentials before release.
-Default deploys to Cloudflare and EdgeOne. Use `-o cf|eo` to deploy only one (`cf` = Cloudflare, `eo` = EdgeOne).
+Use `-o cf|eo` for single target.
 
-See each app README for deploy and config details.
+### short-url
+
+```bash
+pnpm install
+cp edgeapps/apps/short-url/short-url.env.example ./short-url.env
+# Edit short-url.env with your values
+pnpm -F short-url release
+```
+
+> Before first release, create Pages project in CF Dashboard and configure KV bindings and environment variables.
+
+See each app's README for detailed deployment and configuration.

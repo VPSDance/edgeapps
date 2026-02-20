@@ -8,8 +8,7 @@
   ],
   "scripts": {
     "build": "pnpm --filter gh-proxy run build",
-    "build:watch": "pnpm --filter gh-proxy run build:watch",
-    "release": "pnpm --filter gh-proxy run release",
+    "release": "pnpm --filter gh-proxy release",
     "clean": "pnpm --filter gh-proxy run clean"
   }
 }

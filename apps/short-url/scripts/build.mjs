@@ -1,12 +1,24 @@
-import { build, context } from 'esbuild';
 import { resolve, dirname, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync, readdirSync, statSync, rmSync, mkdirSync, cpSync } from 'fs';
+import {
+  existsSync,
+  readFileSync,
+  mkdirSync,
+  rmSync,
+  cpSync,
+  copyFileSync,
+  readdirSync,
+  statSync
+} from 'fs';
+import { execFileSync } from 'child_process';
+import { build as esbuild } from 'esbuild';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const coreRoot = resolve(root, '../../packages/core/src');
-const publicDir = resolve(root, 'public');
-const watch = process.argv.includes('--watch');
+const distDir = resolve(root, 'dist');
+const webDir = resolve(root, '.build-web');
+const cfDir = resolve(distDir, 'cf');
+const eoDir = resolve(distDir, 'eo');
+const eoFuncDir = resolve(eoDir, 'edge-functions');
 const defaultPluginDir = resolve(root, '../../../private/plugins');
 
 function resolveOverlayPath(value) {
@@ -126,7 +138,7 @@ export async function getPluginAdminEntries(ctx) {
 `;
 }
 
-function getPlugins() {
+function getBuildPlugins() {
   if (!pluginEntries.length) return [];
   return [
     {
@@ -136,13 +148,8 @@ function getPlugins() {
           path: 'edgeapps-plugin:entry',
           namespace: 'edgeapps-plugin'
         }));
-        build.onResolve({ filter: /^@edgeapps\/core\/(.+)$/ }, (args) => ({
-          path: resolve(coreRoot, `${args.path.split('/').pop()}.js`)
-        }));
         build.onResolve({ filter: /^edgeapps-plugin-file:/ }, (args) => ({
-          path: decodeURIComponent(
-            args.path.replace(/^edgeapps-plugin-file:/, '')
-          )
+          path: decodeURIComponent(args.path.replace(/^edgeapps-plugin-file:/, ''))
         }));
         build.onLoad({ filter: /.*/, namespace: 'edgeapps-plugin' }, () => ({
           contents: buildPluginModule(pluginEntries),
@@ -153,68 +160,99 @@ function getPlugins() {
   ];
 }
 
-const sharedOptions = {
-  absWorkingDir: root,
-  plugins: getPlugins(),
-  loader: {
-    '.html': 'text'
-  },
-  bundle: true,
-  treeShaking: true,
-  format: 'esm',
-  platform: 'browser',
-  target: 'es2022',
-  logLevel: 'info'
-};
-
-function copyPublicAssets(targetDir) {
-  if (!existsSync(publicDir)) return;
-  cpSync(publicDir, targetDir, { recursive: true });
-}
-
-if (watch) {
-  mkdirSync(resolve(root, 'dist/cf'), { recursive: true });
-  mkdirSync(resolve(root, 'dist/eo'), { recursive: true });
-  copyPublicAssets(resolve(root, 'dist/cf'));
-  copyPublicAssets(resolve(root, 'dist/eo'));
-
-  const cfCtx = await context({
-    ...sharedOptions,
-    entryPoints: ['src/cf/index.js'],
-    outfile: 'dist/cf/_worker.js'
-  });
-  const eoCtx = await context({
-    ...sharedOptions,
-    entryPoints: [
-      'src/edgeone/edge-functions/[[default]].js',
-      'src/edgeone/edge-functions/index.js'
-    ],
-    outdir: 'dist/eo/edge-functions',
-    outbase: 'src/edgeone/edge-functions'
-  });
-  await cfCtx.watch();
-  await eoCtx.watch();
-  console.log('watching...');
-} else {
-  rmSync(resolve(root, 'dist'), { recursive: true, force: true });
-  mkdirSync(resolve(root, 'dist/cf'), { recursive: true });
-  mkdirSync(resolve(root, 'dist/eo/edge-functions'), { recursive: true });
-  copyPublicAssets(resolve(root, 'dist/cf'));
-  copyPublicAssets(resolve(root, 'dist/eo'));
-
-  await build({
-    ...sharedOptions,
-    entryPoints: ['src/cf/index.js'],
-    outfile: 'dist/cf/_worker.js'
-  });
-
-  await build({
-    ...sharedOptions,
-    entryPoints: [
-      'src/edgeone/edge-functions/[[default]].js',
-      'src/edgeone/edge-functions/index.js'
-    ],
-    outdir: 'dist/eo/edge-functions',
-    outbase: 'src/edgeone/edge-functions'
+function run(cmd, args) {
+  execFileSync(cmd, args, {
+    cwd: root,
+    stdio: 'inherit',
+    env: { ...process.env }
   });
 }
+
+function readSpaHtml(inputDir) {
+  const indexPath = resolve(inputDir, 'index.html');
+  if (!existsSync(indexPath)) {
+    throw new Error(`missing SPA output: ${indexPath}`);
+  }
+  return readFileSync(indexPath, 'utf8');
+}
+
+function copyWebAssets(targetDir) {
+  cpSync(webDir, targetDir, {
+    recursive: true,
+    filter: (src) => !src.endsWith('index.html')
+  });
+}
+
+async function bundleCloudflare(spaHtml) {
+  await esbuild({
+    entryPoints: [resolve(root, 'server/cloudflare.ts')],
+    plugins: getBuildPlugins(),
+    loader: {
+      '.html': 'text'
+    },
+    bundle: true,
+    format: 'esm',
+    target: 'es2022',
+    minify: true,
+    define: {
+      __SPA_HTML__: JSON.stringify(spaHtml),
+      __EDGEAPPS_PLATFORM__: '"cf"'
+    },
+    outfile: resolve(cfDir, '_worker.js')
+  });
+}
+
+async function bundleEdgeOne(spaHtml) {
+  mkdirSync(eoFuncDir, { recursive: true });
+
+  await esbuild({
+    entryPoints: [resolve(root, 'server/edgeone.ts')],
+    plugins: getBuildPlugins(),
+    loader: {
+      '.html': 'text'
+    },
+    bundle: true,
+    format: 'esm',
+    target: 'es2020',
+    platform: 'browser',
+    minify: false,
+    define: {
+      __SPA_HTML__: JSON.stringify(spaHtml),
+      __EDGEAPPS_PLATFORM__: '"eo"',
+      'process.env.NODE_ENV': '"production"'
+    },
+    outfile: resolve(eoFuncDir, '[[default]].js')
+  });
+
+  copyFileSync(resolve(eoFuncDir, '[[default]].js'), resolve(eoFuncDir, 'index.js'));
+
+}
+
+async function main() {
+  console.log('[Short-URL] Building SPA (Rsbuild)...');
+  run('pnpm', ['run', 'build:web']);
+
+  // Snapshot the SPA output first, then rebuild dist into target-specific folders.
+  rmSync(webDir, { recursive: true, force: true });
+  cpSync(distDir, webDir, { recursive: true });
+  const spaHtml = readSpaHtml(webDir);
+  rmSync(distDir, { recursive: true, force: true });
+  mkdirSync(cfDir, { recursive: true });
+  mkdirSync(eoFuncDir, { recursive: true });
+
+  console.log('[Short-URL] Bundling Cloudflare worker...');
+  await bundleCloudflare(spaHtml);
+  copyWebAssets(cfDir);
+
+  console.log('[Short-URL] Bundling EdgeOne functions...');
+  await bundleEdgeOne(spaHtml);
+  copyWebAssets(eoDir);
+  rmSync(webDir, { recursive: true, force: true });
+
+  console.log('[Short-URL] Build complete: dist/cf + dist/eo');
+}
+
+main().catch((err) => {
+  console.error(`[Error] ${err?.message || err}`);
+  process.exit(1);
+});
