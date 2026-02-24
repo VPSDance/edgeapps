@@ -15,7 +15,7 @@ A collection of edge applications for Cloudflare Workers and EdgeOne Pages.
 
 ## Docs
 
-- [`docs/platform-limits.zh.md`](docs/platform-limits.zh.md): Cloudflare / EdgeOne / KV / D1 / Supabase free vs paid limits comparison.
+- [`docs/platform-limits.md`](docs/platform-limits.md): Cloudflare / EdgeOne / KV / D1 / Supabase free vs paid limits comparison.
 
 ## Release
 
