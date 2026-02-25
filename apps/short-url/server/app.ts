@@ -25,6 +25,11 @@ export type Bindings = {
 
 const app = new Hono<{ Bindings: Bindings }>()
 
+const ADMIN_HTML_HEADERS = {
+  'cache-control': 'no-store, no-cache, must-revalidate',
+  pragma: 'no-cache',
+}
+
 // ---------- Helpers ----------
 
 function getConfig(env: Bindings) {
@@ -260,7 +265,7 @@ app.get('/_/api/tags', async (c) => {
 // ---------- Admin SPA ----------
 
 // Serve SPA index.html for all admin routes
-app.get('/_/admin', (c) => c.html(__SPA_HTML__))
+app.get('/_/admin', (c) => c.html(__SPA_HTML__, 200, ADMIN_HTML_HEADERS))
 app.get('/_/admin/*', async (c) => {
   // Try static assets first (via CF ASSETS binding)
   if (c.env.ASSETS) {
@@ -268,7 +273,7 @@ app.get('/_/admin/*', async (c) => {
     if (resp.status !== 404) return resp
   }
   // Fallback: serve SPA shell for client-side routing
-  return c.html(__SPA_HTML__)
+  return c.html(__SPA_HTML__, 200, ADMIN_HTML_HEADERS)
 })
 
 // ---------- Short link redirect (MUST be last) ----------

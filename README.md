@@ -8,6 +8,7 @@ A collection of edge applications for Cloudflare Workers and EdgeOne Pages.
 
 - [`apps/gh-proxy`](apps/gh-proxy): GitHub proxy with raw/api/git clone acceleration.
 - [`apps/short-url`](apps/short-url): URL shortener with KV storage.
+- [`apps/npm-registry`](apps/npm-registry): Private npm registry with R2 storage (Cloudflare-only).
 
 ## Packages
 
@@ -39,5 +40,16 @@ pnpm -F short-url release
 ```
 
 > Before first release, create Pages project in CF Dashboard and configure KV bindings and environment variables.
+
+### npm-registry
+
+```bash
+pnpm install
+cp edgeapps/apps/npm-registry/npm-registry.env.example ./npm-registry.env
+# Edit npm-registry.env with your values
+pnpm -F npm-registry release
+```
+
+> Configure `NPM_BUCKET` (R2) + `AUTH_KV` (KV) bindings in Cloudflare Pages before first release.
 
 See each app's README for detailed deployment and configuration.

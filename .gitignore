@@ -3,6 +3,7 @@ node_modules/
 dist/
 build/
 *.txt
+*.mjs.raw
 
 # React Router
 .react-router/

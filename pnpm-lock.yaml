@@ -18,6 +18,37 @@ importers:
         specifier: ^0.20.2
         version: 0.20.2
 
+  apps/npm-registry:
+    dependencies:
+      '@edgeapps/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@radix-ui/react-alert-dialog':
+        specifier: ^1.1.15
+        version: 1.1.15(@types/react-dom@19.2.3(@types/react@19.2.13))(@types/react@19.2.13)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@radix-ui/react-popover':
+        specifier: ^1.1.15
+        version: 1.1.15(@types/react-dom@19.2.3(@types/react@19.2.13))(@types/react@19.2.13)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@radix-ui/react-toast':
+        specifier: ^1.2.15
+        version: 1.2.15(@types/react-dom@19.2.3(@types/react@19.2.13))(@types/react@19.2.13)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      react:
+        specifier: ^19.2.0
+        version: 19.2.4
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.4(react@19.2.4)
+    devDependencies:
+      '@rsbuild/core':
+        specifier: ^1.7.3
+        version: 1.7.3
+      '@rsbuild/plugin-react':
+        specifier: ^1.4.5
+        version: 1.4.5(@rsbuild/core@1.7.3)
+      esbuild:
+        specifier: ^0.20.2
+        version: 0.20.2
+
   apps/short-url:
     dependencies:
       '@edgeapps/core':

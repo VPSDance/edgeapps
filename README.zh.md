@@ -8,6 +8,7 @@ Languages: [English](README.md) | [中文](README.zh.md)
 
 - [`apps/gh-proxy`](apps/gh-proxy): GitHub 代理, 支持 raw/api/git clone 等加速.
 - [`apps/short-url`](apps/short-url): 短链服务, 默认纯 KV 存储.
+- [`apps/npm-registry`](apps/npm-registry): 私有 npm 仓库, R2 存储（仅 Cloudflare）.
 
 ## 包
 
@@ -39,5 +40,16 @@ pnpm -F short-url release
 ```
 
 > 首次发布前需在 CF Dashboard 创建 Pages 项目并配置 KV 绑定和环境变量.
+
+### npm-registry
+
+```bash
+pnpm install
+cp edgeapps/apps/npm-registry/npm-registry.env.example ./npm-registry.env
+# 编辑 npm-registry.env 填入变量
+pnpm -F npm-registry release
+```
+
+> 首次发布前请在 Cloudflare Pages 配置 `NPM_BUCKET`（R2）与 `AUTH_KV`（KV）绑定.
 
 详细的部署与配置请查看各应用的 README.
