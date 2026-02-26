@@ -38,28 +38,22 @@ export function isRecordBanned(rec, now = Date.now()) {
 	return now < until;
 }
 
-export async function recordAuthEvent(env, { ip, kind, path, auth }) {
+export async function recordAuthEvent(env, { ip, kind, path, auth, app }) {
 	const kv = getAuthKvStore(env);
 	if (!kv) return null;
 	const now = Date.now();
 	const isFail = kind === "fail";
-	const windowMs = isFail
-		? Math.max(0, AUTH_BAN_WINDOW_MIN || 0) * 60 * 1000
-		: 0;
-	const rec = (await getAuthRecord(env, ip)) || { ip };
-	let bucket;
-	if (isFail) {
-		if (!rec.fail) {
-			rec.fail = { count: 0, firstTs: now, lastTs: now, banUntil: 0 };
-		}
-		bucket = rec.fail;
-	} else {
-		if (!rec.ok) {
-			rec.ok = { count: 0, firstTs: now, lastTs: now };
-		}
-		bucket = rec.ok;
+	if (!isFail) {
+		return getAuthRecord(env, ip);
 	}
-	if (isFail && windowMs > 0 && now - bucket.firstTs > windowMs) {
+	const appName = String(app || "").trim();
+	const windowMs = Math.max(0, AUTH_BAN_WINDOW_MIN || 0) * 60 * 1000;
+	const rec = (await getAuthRecord(env, ip)) || { ip };
+	if (!rec.fail) {
+		rec.fail = { count: 0, firstTs: now, lastTs: now, banUntil: 0 };
+	}
+	const bucket = rec.fail;
+	if (windowMs > 0 && now - bucket.firstTs > windowMs) {
 		bucket.count = 0;
 		bucket.firstTs = now;
 		bucket.banUntil = 0;
@@ -68,7 +62,14 @@ export async function recordAuthEvent(env, { ip, kind, path, auth }) {
 	bucket.lastTs = now;
 	bucket.lastPath = path || bucket.lastPath || "";
 	bucket.lastAuth = auth || bucket.lastAuth || "";
-	if (isFail && AUTH_BAN_AFTER > 0 && bucket.count >= AUTH_BAN_AFTER) {
+	if (appName) {
+		bucket.lastApp = appName;
+		if (!rec.apps || typeof rec.apps !== "object") {
+			rec.apps = {};
+		}
+		rec.apps[appName] = Number(rec.apps[appName] || 0) + 1;
+	}
+	if (AUTH_BAN_AFTER > 0 && bucket.count >= AUTH_BAN_AFTER) {
 		bucket.banUntil = now + AUTH_BAN_TTL_MIN * 60 * 1000;
 	}
 	try {

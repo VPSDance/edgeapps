@@ -157,6 +157,7 @@ export async function handleProxyEntry({
     }
     const authRes = await requireAuth(request, {
       env,
+      app,
       path: pathRaw,
       basicAuth,
       basicRealm
@@ -268,6 +269,7 @@ export async function handleProxyEntry({
     }
     const authRes = await requireAuth(request, {
       env,
+      app,
       path: pathRaw,
       basicAuth,
       basicRealm

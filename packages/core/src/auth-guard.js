@@ -20,6 +20,7 @@ import { TOKEN_TTL_MIN } from './constants.js';
  */
 export async function requireAuth(req, {
   env,
+  app = '',
   path = '',
   basicAuth = '',
   basicRealm = 'edgeapps',
@@ -43,15 +44,17 @@ export async function requireAuth(req, {
 
   if (!tokenOk && !basicOk) {
     if (hasAuth) {
-      const rec = await recordAuthEvent(env, { ip, kind: 'fail', path, auth: attempted });
+      const rec = await recordAuthEvent(env, {
+        ip,
+        kind: 'fail',
+        app,
+        path,
+        auth: attempted
+      });
       const bannedNow = isRecordBanned(rec);
       if (bannedNow) return { ok: false, response: forbidden() };
     }
     return { ok: false, response: unauthorized(basicRealm) };
-  }
-
-  if (hasAuth) {
-    await recordAuthEvent(env, { ip, kind: 'ok', path, auth: attempted });
   }
 
   const sessionToken = tokenOk ? bearerToken : await buildToken({ basicPass: pass });

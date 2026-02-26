@@ -664,6 +664,7 @@ async function authenticateRequest(request, env, {
       const updated = await recordAuthEvent(env, {
         ip,
         kind: 'fail',
+        app: APP_NAME,
         path,
         auth: 'token'
       });
@@ -686,6 +687,7 @@ async function authenticateRequest(request, env, {
     const updated = await recordAuthEvent(env, {
       ip,
       kind: 'fail',
+      app: APP_NAME,
       path,
       auth: 'token'
     });
@@ -698,12 +700,6 @@ async function authenticateRequest(request, env, {
     };
   }
 
-  await recordAuthEvent(env, {
-    ip,
-    kind: 'ok',
-    path,
-    auth: 'token'
-  });
   return {
     ok: true,
     account: authz.account || null,
