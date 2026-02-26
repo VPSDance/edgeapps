@@ -237,6 +237,21 @@ for host in $(parse_csv "$HOST_LIST"); do
   fi
   ok "metadata latest -> $LATEST"
 
+  META_TARBALL=$(printf '%s' "$META_JSON" | node -e '
+const fs = require("fs");
+const meta = JSON.parse(fs.readFileSync(0, "utf8"));
+const latest = String(meta?.["dist-tags"]?.latest || "");
+const tarball = latest && meta?.versions?.[latest]?.dist?.tarball
+  ? String(meta.versions[latest].dist.tarball)
+  : "";
+process.stdout.write(tarball);
+')
+  if [[ "$META_TARBALL" == "$HOST/"* ]]; then
+    ok "metadata tarball rewritten -> local registry"
+  else
+    fail "metadata tarball is not local registry ($META_TARBALL)"
+  fi
+
   PKG_BASE=$(node -e 'const p=process.argv[1]; console.log(p.includes("/") ? p.split("/").pop() : p);' "$READ_TEST_PACKAGE")
   CANONICAL_TGZ_URL="$HOST/$READ_TEST_PACKAGE/-/${PKG_BASE}-${LATEST}.tgz"
 
@@ -297,6 +312,42 @@ for host in $(parse_csv "$HOST_LIST"); do
     ok "dist-tag delete -> $RW_TAG"
   else
     fail "dist-tag delete failed -> status $DEL_CODE"
+  fi
+
+  SEMVER_MAJOR="$(date +%s)"
+  SEMVER_STABLE="${SEMVER_MAJOR}.0.0"
+  SEMVER_BETA="${SEMVER_STABLE}-beta.1"
+
+  SEMVER_PAYLOAD_STABLE=$(build_publish_payload "$WRITE_TEST_PACKAGE" "$SEMVER_STABLE")
+  SEMVER_PUB_STABLE_CODE=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 40 -X PUT -H "$RW_AUTH_HEADER" -H 'content-type: application/json' --data "$SEMVER_PAYLOAD_STABLE" "$PUBLISH_URL") || SEMVER_PUB_STABLE_CODE="000"
+  if [ "$SEMVER_PUB_STABLE_CODE" = "201" ]; then
+    ok "semver publish stable -> $WRITE_TEST_PACKAGE@$SEMVER_STABLE"
+  else
+    fail "semver publish stable failed -> status $SEMVER_PUB_STABLE_CODE ($WRITE_TEST_PACKAGE@$SEMVER_STABLE)"
+  fi
+
+  SEMVER_PAYLOAD_BETA=$(build_publish_payload "$WRITE_TEST_PACKAGE" "$SEMVER_BETA")
+  SEMVER_PUB_BETA_CODE=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 40 -X PUT -H "$RW_AUTH_HEADER" -H 'content-type: application/json' --data "$SEMVER_PAYLOAD_BETA" "$PUBLISH_URL") || SEMVER_PUB_BETA_CODE="000"
+  if [ "$SEMVER_PUB_BETA_CODE" = "201" ]; then
+    ok "semver publish prerelease -> $WRITE_TEST_PACKAGE@$SEMVER_BETA"
+  else
+    fail "semver publish prerelease failed -> status $SEMVER_PUB_BETA_CODE ($WRITE_TEST_PACKAGE@$SEMVER_BETA)"
+  fi
+
+  DIST_TAG_LATEST_URL="$DIST_LIST_URL/latest"
+  DEL_LATEST_CODE=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 40 -X DELETE -H "$RW_AUTH_HEADER" "$DIST_TAG_LATEST_URL") || DEL_LATEST_CODE="000"
+  if [ "$DEL_LATEST_CODE" = "200" ] || [ "$DEL_LATEST_CODE" = "204" ]; then
+    ok "dist-tag delete -> latest"
+  else
+    fail "dist-tag delete latest failed -> status $DEL_LATEST_CODE"
+  fi
+
+  SEMVER_TAG_JSON=$(curl -fsSL --max-time 40 -H "$RW_AUTH_HEADER" "$DIST_LIST_URL") || SEMVER_TAG_JSON='{}'
+  SEMVER_LATEST_AFTER=$(printf '%s' "$SEMVER_TAG_JSON" | json_field 'latest')
+  if [ "$SEMVER_LATEST_AFTER" = "$SEMVER_STABLE" ]; then
+    ok "semver latest fallback -> $SEMVER_LATEST_AFTER"
+  else
+    fail "semver latest fallback failed -> expected $SEMVER_STABLE got ${SEMVER_LATEST_AFTER:-<empty>}"
   fi
 
   META_WRITE_URL="$HOST/$RW_ENCODED?write=true"

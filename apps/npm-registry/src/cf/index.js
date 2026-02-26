@@ -15,6 +15,8 @@ import {
   getAclSummary
 } from './accounts.js';
 import { APP_NAME, PLATFORM_CF } from '../meta.js';
+import validSemver from 'semver/functions/valid.js';
+import rcompareSemver from 'semver/functions/rcompare.js';
 
 const STATUS_PATH = '/_/status';
 const ADMIN_PATH = '/_/admin';
@@ -200,6 +202,10 @@ function resolveUpstreamBaseUrl(env) {
   }
 }
 
+function isAbsoluteHttpUrl(value) {
+  return /^https?:\/\//i.test(String(value || '').trim());
+}
+
 function normalizePackageName(input) {
   const value = String(input || '').trim();
   if (!value) return '';
@@ -239,6 +245,29 @@ function tarballPath(pkgName, version) {
   return `/-/tarballs/${encodeURIComponent(pkgName)}/${encodeURIComponent(version)}.tgz`;
 }
 
+function rewriteUpstreamMetadataTarballs(meta, pkgName, origin) {
+  let out;
+  try {
+    out = JSON.parse(JSON.stringify(meta || {}));
+  } catch {
+    return meta;
+  }
+  const resolvedName = normalizePackageName(out?.name || pkgName);
+  if (!resolvedName) return out;
+  if (!out.versions || typeof out.versions !== 'object') return out;
+
+  for (const [versionKey, manifest] of Object.entries(out.versions)) {
+    if (!manifest || typeof manifest !== 'object') continue;
+    const resolvedVersion = String(manifest.version || versionKey || '').trim();
+    if (!resolvedVersion) continue;
+    if (!manifest.dist || typeof manifest.dist !== 'object') {
+      manifest.dist = {};
+    }
+    manifest.dist.tarball = `${origin}${tarballPath(resolvedName, resolvedVersion)}`;
+  }
+  return out;
+}
+
 async function readMeta(bucket, pkgName) {
   const object = await bucket.get(metaKey(pkgName));
   if (!object) return null;
@@ -275,6 +304,25 @@ function resolveUpstreamPathUrl(env, pathname, search = '') {
   const prefix = base.pathname.replace(/\/$/, '');
   const upstreamUrl = new URL(`${prefix}${safePath}`, base.origin);
   upstreamUrl.search = search || '';
+  return upstreamUrl;
+}
+
+function resolveUpstreamTarballUrl(request, env, upstreamPathOrUrl) {
+  const upstreamBase = resolveUpstreamBaseUrl(env);
+  const reqUrl = new URL(request.url);
+  const raw = String(upstreamPathOrUrl || '').trim();
+  if (!raw) return null;
+
+  const upstreamUrl = isAbsoluteHttpUrl(raw)
+    ? new URL(raw)
+    : resolveUpstreamPathUrl(env, raw, reqUrl.search);
+
+  if (upstreamUrl.origin !== upstreamBase.origin) {
+    return null;
+  }
+  if (!upstreamUrl.search) {
+    upstreamUrl.search = reqUrl.search;
+  }
   return upstreamUrl;
 }
 
@@ -496,17 +544,42 @@ async function parseJsonBody(request) {
   }
 }
 
-function compareVersionDesc(a, b) {
+function normalizeValidSemver(version) {
+  return validSemver(String(version || '').trim());
+}
+
+function compareVersionDescFallback(a, b) {
   return String(b).localeCompare(String(a), undefined, {
     numeric: true,
     sensitivity: 'base'
   });
 }
 
+function compareVersionDesc(a, b) {
+  const aSemver = normalizeValidSemver(a);
+  const bSemver = normalizeValidSemver(b);
+  if (aSemver && bSemver) {
+    return rcompareSemver(aSemver, bSemver);
+  }
+  if (aSemver && !bSemver) return -1;
+  if (!aSemver && bSemver) return 1;
+  return compareVersionDescFallback(a, b);
+}
+
 function pickNewestVersion(versions) {
   const list = Object.keys(versions || {});
   if (!list.length) return '';
-  list.sort(compareVersionDesc);
+  const semverOnly = list
+    .map((version) => ({
+      version,
+      normalized: normalizeValidSemver(version)
+    }))
+    .filter((item) => item.normalized);
+  if (semverOnly.length) {
+    semverOnly.sort((a, b) => rcompareSemver(a.normalized, b.normalized));
+    return semverOnly[0].version;
+  }
+  list.sort(compareVersionDescFallback);
   return list[0];
 }
 
@@ -767,7 +840,8 @@ async function handleGetMetadata(request, env, pkgName) {
   try {
     const upstream = await fetchUpstreamMetadata(request, env, pkgName);
     if (!upstream) return notFound();
-    return json(upstream, 200, {
+    const origin = new URL(request.url).origin;
+    return json(rewriteUpstreamMetadataTarballs(upstream, pkgName, origin), 200, {
       'x-npm-registry-source': 'upstream'
     });
   } catch (err) {
@@ -777,10 +851,10 @@ async function handleGetMetadata(request, env, pkgName) {
 }
 
 async function fetchUpstreamTarballByPath(request, env, upstreamPath) {
-  const reqUrl = new URL(request.url);
-  const upstreamBase = resolveUpstreamBaseUrl(env);
-  const upstreamUrl = new URL(upstreamPath, upstreamBase.origin);
-  upstreamUrl.search = reqUrl.search;
+  const upstreamUrl = resolveUpstreamTarballUrl(request, env, upstreamPath);
+  if (!upstreamUrl) {
+    return notFound();
+  }
   const method = request.method === 'HEAD' ? 'HEAD' : 'GET';
 
   const upstreamRes = await fetch(upstreamUrl.toString(), {
@@ -806,6 +880,22 @@ async function fetchUpstreamTarballByPath(request, env, upstreamPath) {
   });
 }
 
+async function fetchUpstreamTarballByPackageVersion(request, env, pkgName, version) {
+  let upstreamMeta;
+  try {
+    upstreamMeta = await fetchUpstreamMetadata(request, env, pkgName);
+  } catch (err) {
+    console.error('upstream metadata for tarball fallback failed', err);
+    return internalError('upstream_metadata_fetch_failed');
+  }
+  if (!upstreamMeta) return notFound();
+  const distTarball = String(
+    upstreamMeta?.versions?.[version]?.dist?.tarball || ''
+  ).trim();
+  if (!distTarball) return notFound();
+  return fetchUpstreamTarballByPath(request, env, distTarball);
+}
+
 async function handleGetTarball(request, env, pkgName, version, options = {}) {
   const auth = await authenticateRequest(request, env, {
     scope: 'read',
@@ -823,7 +913,7 @@ async function handleGetTarball(request, env, pkgName, version, options = {}) {
     if (options.upstreamPath) {
       return fetchUpstreamTarballByPath(request, env, options.upstreamPath);
     }
-    return notFound();
+    return fetchUpstreamTarballByPackageVersion(request, env, pkgName, version);
   }
   return new Response(request.method === 'HEAD' ? null : object.body, {
     status: 200,
