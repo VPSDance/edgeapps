@@ -20,6 +20,8 @@ This app is currently **Cloudflare-only**.
 
 - `GET /-/ping`
 - `GET /-/whoami`
+- `POST /-/npm/v1/security/advisories/bulk` (npm audit passthrough)
+- `POST /-/npm/v1/security/audits/quick` (npm audit passthrough)
 - `GET /_/status`
 - `GET /` (public landing page)
 - `GET /login` (redirect to `/_/admin`)

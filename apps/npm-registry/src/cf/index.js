@@ -29,6 +29,7 @@ const WHOAMI_PATH = '/-/whoami';
 const LEGACY_LOGIN_PREFIX = '/-/user/org.couchdb.user:';
 const DIST_TAG_PREFIX = '/-/package/';
 const TARBALL_PREFIX = '/-/tarballs/';
+const AUDIT_PREFIX = '/-/npm/v1/security/';
 const JSON_HEADERS = {
   'content-type': 'application/json; charset=UTF-8',
   'cache-control': 'no-store'
@@ -73,6 +74,10 @@ function notFound() {
 
 function internalError(message) {
   return json({ error: 'internal_error', reason: message }, 500);
+}
+
+function conflict(reason = 'conflict') {
+  return json({ error: 'conflict', reason }, 409);
 }
 
 function decodeBase64(input) {
@@ -260,6 +265,48 @@ async function fetchUpstreamMetadata(request, env, pkgName) {
     throw new Error(`upstream_metadata_${res.status}`);
   }
   return res.json();
+}
+
+function resolveUpstreamPathUrl(env, pathname, search = '') {
+  const base = resolveUpstreamBaseUrl(env);
+  const safePath = String(pathname || '').startsWith('/')
+    ? String(pathname || '')
+    : `/${String(pathname || '')}`;
+  const prefix = base.pathname.replace(/\/$/, '');
+  const upstreamUrl = new URL(`${prefix}${safePath}`, base.origin);
+  upstreamUrl.search = search || '';
+  return upstreamUrl;
+}
+
+async function handleAuditProxy(request, env) {
+  if (request.method !== 'POST' && request.method !== 'GET') {
+    return json({ error: 'method_not_allowed' }, 405);
+  }
+  const auth = await authenticateRequest(request, env, {
+    scope: 'read',
+    path: '-/npm/v1/security'
+  });
+  if (!auth.ok) return auth.response;
+
+  const reqUrl = new URL(request.url);
+  const upstreamUrl = resolveUpstreamPathUrl(env, reqUrl.pathname, reqUrl.search);
+  const upstreamRes = await fetch(upstreamUrl.toString(), {
+    method: request.method,
+    headers: {
+      accept: request.headers.get('accept') || 'application/json',
+      'content-type': request.headers.get('content-type') || 'application/json',
+      'user-agent': request.headers.get('user-agent') || 'edgeapps-npm-registry/1.0'
+    },
+    body: request.method === 'POST' ? request.body : undefined
+  });
+
+  return new Response(upstreamRes.body, {
+    status: upstreamRes.status,
+    headers: {
+      'content-type': upstreamRes.headers.get('content-type') || 'application/json; charset=UTF-8',
+      'cache-control': 'no-store'
+    }
+  });
 }
 
 function createRevision() {
@@ -812,7 +859,7 @@ async function deleteTarballsByPrefix(bucket, prefix) {
   }
 }
 
-async function handlePackageRevisionWrite(request, env, pkgName) {
+async function handlePackageRevisionWrite(request, env, pkgName, expectedRev) {
   const auth = await authenticateRequest(request, env, {
     scope: 'write',
     path: `${pkgName}:-rev`,
@@ -825,6 +872,10 @@ async function handlePackageRevisionWrite(request, env, pkgName) {
     return internalError(`Missing R2 binding ${bindingName}`);
   }
   const currentMeta = await readMeta(bucket, pkgName);
+  if (!currentMeta) return notFound();
+  if (String(currentMeta._rev || '') !== String(expectedRev || '')) {
+    return conflict('rev_mismatch');
+  }
 
   const body = await parseJsonBody(request);
   if (!body || typeof body !== 'object') {
@@ -869,7 +920,7 @@ async function handlePackageRevisionWrite(request, env, pkgName) {
   });
 }
 
-async function handlePackageRevisionDelete(request, env, pkgName) {
+async function handlePackageRevisionDelete(request, env, pkgName, expectedRev) {
   const auth = await authenticateRequest(request, env, {
     scope: 'write',
     path: `${pkgName}:-rev-delete`,
@@ -887,6 +938,9 @@ async function handlePackageRevisionDelete(request, env, pkgName) {
 
   const meta = await readMeta(bucket, pkgName);
   if (!meta) return notFound();
+  if (String(meta._rev || '') !== String(expectedRev || '')) {
+    return conflict('rev_mismatch');
+  }
 
   await bucket.delete(metaKey(pkgName));
   await deleteTarballsByPrefix(bucket, `tarballs/${encodeURIComponent(pkgName)}/`);
@@ -1499,6 +1553,9 @@ async function executeRequest(request, env) {
   if (pathname === WHOAMI_PATH && request.method === 'GET') {
     return handleWhoAmI(request, env);
   }
+  if (pathname.startsWith(AUDIT_PREFIX)) {
+    return handleAuditProxy(request, env);
+  }
 
   const legacyLoginUser = parseLegacyLoginUsername(pathname);
   if (legacyLoginUser) {
@@ -1522,10 +1579,10 @@ async function executeRequest(request, env) {
   const packageRev = parsePackageRevisionRoute(pathname);
   if (packageRev) {
     if (request.method === 'PUT') {
-      return handlePackageRevisionWrite(request, env, packageRev.pkgName);
+      return handlePackageRevisionWrite(request, env, packageRev.pkgName, packageRev.rev);
     }
     if (request.method === 'DELETE') {
-      return handlePackageRevisionDelete(request, env, packageRev.pkgName);
+      return handlePackageRevisionDelete(request, env, packageRev.pkgName, packageRev.rev);
     }
     return json({ error: 'method_not_allowed' }, 405);
   }

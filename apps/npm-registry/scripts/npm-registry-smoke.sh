@@ -99,6 +99,26 @@ run_expect_status() {
   fi
 }
 
+run_expect_status_in() {
+  local name="$1"
+  local url="$2"
+  local expected_csv="$3"
+  shift 3
+  local code
+  if ! code=$(http_status "$url" "$@"); then
+    fail "$name -> request failed ($url)"
+    return
+  fi
+  local expected
+  for expected in $(parse_csv "$expected_csv"); do
+    if [ "$code" = "$expected" ]; then
+      ok "$name -> $code"
+      return
+    fi
+  done
+  fail "$name -> expected one of [$expected_csv] got $code ($url)"
+}
+
 json_field() {
   local path="$1"
   node -e '
@@ -190,6 +210,16 @@ for host in $(parse_csv "$HOST_LIST"); do
   run_expect_status "status" "$HOST/_/status" 200 -H "$AUTH_HEADER"
   run_expect_status "ping" "$HOST/-/ping" 200 -H "$AUTH_HEADER"
   run_expect_status "whoami" "$HOST/-/whoami" 200 -H "$AUTH_HEADER"
+
+  AUDIT_BULK_URL="$HOST/-/npm/v1/security/advisories/bulk"
+  AUDIT_QUICK_URL="$HOST/-/npm/v1/security/audits/quick"
+  AUDIT_BULK_PAYLOAD='{"lodash":["4.17.21"]}'
+  AUDIT_QUICK_PAYLOAD='{"name":"smoke-audit","version":"1.0.0","requires":true,"dependencies":{"lodash":{"version":"4.17.21"}}}'
+
+  run_expect_status "audit bulk unauthorized" "$AUDIT_BULK_URL" 401 -X POST -H 'content-type: application/json' --data "$AUDIT_BULK_PAYLOAD"
+  run_expect_status "audit quick unauthorized" "$AUDIT_QUICK_URL" 401 -X POST -H 'content-type: application/json' --data "$AUDIT_QUICK_PAYLOAD"
+  run_expect_status_in "audit bulk passthrough" "$AUDIT_BULK_URL" "200,400" -X POST -H "$AUTH_HEADER" -H 'content-type: application/json' --data "$AUDIT_BULK_PAYLOAD"
+  run_expect_status_in "audit quick passthrough" "$AUDIT_QUICK_URL" "200,400" -X POST -H "$AUTH_HEADER" -H 'content-type: application/json' --data "$AUDIT_QUICK_PAYLOAD"
 
   ENCODED_PKG=$(node -e 'console.log(encodeURIComponent(process.argv[1]))' "$READ_TEST_PACKAGE")
   META_URL="$HOST/$ENCODED_PKG"

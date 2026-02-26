@@ -20,6 +20,8 @@ Languages: [English](README.md) | [中文](README.zh.md)
 
 - `GET /-/ping`
 - `GET /-/whoami`
+- `POST /-/npm/v1/security/advisories/bulk`（npm audit 透传）
+- `POST /-/npm/v1/security/audits/quick`（npm audit 透传）
 - `GET /_/status`
 - `GET /`（公开首页）
 - `GET /login`（跳转到 `/_/admin`）
