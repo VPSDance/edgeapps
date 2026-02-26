@@ -207,6 +207,12 @@ function parsePackageNameFromPath(pathname) {
   if (!trimmed || trimmed.startsWith('-/') || trimmed.startsWith('_/')) {
     return '';
   }
+  if (trimmed.includes('/-/')) {
+    return '';
+  }
+  if (trimmed.includes('/-rev/')) {
+    return '';
+  }
   if (trimmed.startsWith('@')) {
     const parts = trimmed.split('/');
     if (parts.length >= 2) {
@@ -256,7 +262,16 @@ async function fetchUpstreamMetadata(request, env, pkgName) {
   return res.json();
 }
 
+function createRevision() {
+  const now = Date.now().toString(36);
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `${now}-${rand}`;
+}
+
 async function writeMeta(bucket, pkgName, doc) {
+  doc._id = pkgName;
+  doc.name = pkgName;
+  doc._rev = createRevision();
   await bucket.put(metaKey(pkgName), JSON.stringify(doc), {
     httpMetadata: {
       contentType: 'application/json; charset=UTF-8'
@@ -267,6 +282,7 @@ async function writeMeta(bucket, pkgName, doc) {
 function buildMetadataResponse(meta, origin) {
   const out = {
     _id: meta.name,
+    _rev: String(meta._rev || createRevision()),
     name: meta.name,
     'dist-tags': meta['dist-tags'] || {},
     versions: {},
@@ -285,12 +301,21 @@ function parseDistTagRoute(pathname) {
   const raw = String(pathname || '');
   if (!raw.startsWith(DIST_TAG_PREFIX)) return null;
   const rest = raw.slice(DIST_TAG_PREFIX.length);
-  const marker = '/dist-tags/';
+  const marker = '/dist-tags';
   const idx = rest.indexOf(marker);
   if (idx <= 0) return null;
   const pkgEncoded = rest.slice(0, idx);
-  const tagRaw = rest.slice(idx + marker.length);
-  if (!pkgEncoded || !tagRaw) return null;
+  const suffix = rest.slice(idx + marker.length);
+  if (!pkgEncoded) return null;
+  if (!suffix || suffix === '/') {
+    return {
+      pkgName: normalizePackageName(pkgEncoded),
+      tag: ''
+    };
+  }
+  if (!suffix.startsWith('/')) return null;
+  const tagRaw = suffix.slice(1);
+  if (!tagRaw) return null;
   return {
     pkgName: normalizePackageName(pkgEncoded),
     tag: decodeURIComponent(tagRaw)
@@ -310,6 +335,96 @@ function parseTarballRoute(pathname) {
   return {
     pkgName: normalizePackageName(pkgEncoded),
     version
+  };
+}
+
+function parseCanonicalTarballRoute(pathname) {
+  const raw = String(pathname || '');
+  let matched = raw.match(/^\/(@[^/]+\/[^/]+)\/-\/([^/]+\.tgz)$/);
+  if (!matched) {
+    matched = raw.match(/^\/([^/@][^/]*)\/-\/([^/]+\.tgz)$/);
+  }
+  if (!matched) return null;
+
+  const pkgName = normalizePackageName(matched[1] || '');
+  const fileName = decodeURIComponent(matched[2] || '');
+  if (!pkgName || !fileName.endsWith('.tgz')) return null;
+
+  const baseName = pkgName.includes('/') ? pkgName.split('/').pop() : pkgName;
+  const expectedPrefix = `${baseName}-`;
+  const version = fileName.startsWith(expectedPrefix)
+    ? fileName.slice(expectedPrefix.length, -4)
+    : fileName.slice(0, -4);
+
+  if (!version) return null;
+  return {
+    pkgName,
+    version,
+    upstreamPath: raw
+  };
+}
+
+function parsePackageRevisionRoute(pathname) {
+  const raw = String(pathname || '');
+  if (raw.startsWith(`${TARBALL_PREFIX}`)) return null;
+  const marker = '/-rev/';
+  const idx = raw.lastIndexOf(marker);
+  if (idx <= 1) return null;
+  const pkgRaw = raw.slice(1, idx);
+  const revRaw = raw.slice(idx + marker.length);
+  if (!revRaw) return null;
+  if (!pkgRaw || pkgRaw.startsWith('-/')) return null;
+  if (pkgRaw.includes('/-/')) return null;
+  const pkgName = normalizePackageName(pkgRaw);
+  if (!pkgName) return null;
+  if (pkgName.startsWith('@')) {
+    const scopedParts = pkgName.split('/');
+    if (scopedParts.length !== 2 || !scopedParts[0] || !scopedParts[1]) {
+      return null;
+    }
+  } else if (pkgName.includes('/')) {
+    return null;
+  }
+  return {
+    pkgName,
+    rev: decodeURIComponent(revRaw)
+  };
+}
+
+function parseTarballRevisionRoute(pathname) {
+  const raw = String(pathname || '');
+
+  // /-/tarballs/<encoded-package>/<version>.tgz/-rev/<rev>
+  if (raw.startsWith(`${TARBALL_PREFIX}`)) {
+    const marker = '/-rev/';
+    const idx = raw.indexOf(marker);
+    if (idx > 0) {
+      const tarballPathOnly = raw.slice(0, idx);
+      const rev = decodeURIComponent(raw.slice(idx + marker.length));
+      const parsed = parseTarballRoute(tarballPathOnly);
+      if (parsed) {
+        return {
+          ...parsed,
+          rev
+        };
+      }
+    }
+  }
+
+  // /<package>/-/<file>.tgz/-rev/<rev>
+  let matched = raw.match(/^\/(@[^/]+\/[^/]+)\/-\/([^/]+\.tgz)\/-rev\/([^/]+)$/);
+  if (!matched) {
+    matched = raw.match(/^\/([^/@][^/]*)\/-\/([^/]+\.tgz)\/-rev\/([^/]+)$/);
+  }
+  if (!matched) return null;
+  const parsedCanonical = parseCanonicalTarballRoute(
+    `/${matched[1]}/-/${matched[2]}`
+  );
+  if (!parsedCanonical) return null;
+  return {
+    pkgName: parsedCanonical.pkgName,
+    version: parsedCanonical.version,
+    rev: decodeURIComponent(matched[3] || '')
   };
 }
 
@@ -577,6 +692,8 @@ async function handlePing(request, env) {
 }
 
 async function handleGetMetadata(request, env, pkgName) {
+  const urlObj = new URL(request.url);
+  const writeQuery = /^(1|true|yes)$/i.test(String(urlObj.searchParams.get('write') || ''));
   const auth = await authenticateRequest(request, env, {
     scope: 'read',
     path: pkgName,
@@ -595,6 +712,10 @@ async function handleGetMetadata(request, env, pkgName) {
       'x-npm-registry-source': 'local'
     });
   }
+  if (writeQuery) {
+    // npm unpublish requests write-mode metadata and expects only local packuments.
+    return notFound();
+  }
 
   try {
     const upstream = await fetchUpstreamMetadata(request, env, pkgName);
@@ -608,7 +729,37 @@ async function handleGetMetadata(request, env, pkgName) {
   }
 }
 
-async function handleGetTarball(request, env, pkgName, version) {
+async function fetchUpstreamTarballByPath(request, env, upstreamPath) {
+  const reqUrl = new URL(request.url);
+  const upstreamBase = resolveUpstreamBaseUrl(env);
+  const upstreamUrl = new URL(upstreamPath, upstreamBase.origin);
+  upstreamUrl.search = reqUrl.search;
+  const method = request.method === 'HEAD' ? 'HEAD' : 'GET';
+
+  const upstreamRes = await fetch(upstreamUrl.toString(), {
+    method,
+    headers: {
+      accept: request.headers.get('accept') || '*/*',
+      'user-agent': 'edgeapps-npm-registry/1.0'
+    }
+  });
+  if (upstreamRes.status === 404) return notFound();
+  if (!upstreamRes.ok) {
+    console.error('upstream tarball fetch error', upstreamRes.status, upstreamUrl.toString());
+    return internalError(`upstream_tarball_${upstreamRes.status}`);
+  }
+
+  return new Response(method === 'HEAD' ? null : upstreamRes.body, {
+    status: 200,
+    headers: {
+      'content-type': upstreamRes.headers.get('content-type') || 'application/octet-stream',
+      'cache-control': 'private, max-age=300',
+      etag: upstreamRes.headers.get('etag') || ''
+    }
+  });
+}
+
+async function handleGetTarball(request, env, pkgName, version, options = {}) {
   const auth = await authenticateRequest(request, env, {
     scope: 'read',
     path: `${pkgName}@${version}`,
@@ -621,8 +772,13 @@ async function handleGetTarball(request, env, pkgName, version) {
     return internalError(`Missing R2 binding ${bindingName}`);
   }
   const object = await bucket.get(tarballKey(pkgName, version));
-  if (!object) return notFound();
-  return new Response(object.body, {
+  if (!object) {
+    if (options.upstreamPath) {
+      return fetchUpstreamTarballByPath(request, env, options.upstreamPath);
+    }
+    return notFound();
+  }
+  return new Response(request.method === 'HEAD' ? null : object.body, {
     status: 200,
     headers: {
       'content-type': object.httpMetadata?.contentType || 'application/octet-stream',
@@ -630,6 +786,131 @@ async function handleGetTarball(request, env, pkgName, version) {
       etag: object.httpEtag || ''
     }
   });
+}
+
+async function deleteTarballsByPrefix(bucket, prefix) {
+  if (!hasR2List(bucket) || !hasR2Delete(bucket)) {
+    return;
+  }
+  let cursor = '';
+  for (let page = 0; page < 200; page += 1) {
+    const listed = await bucket.list({
+      prefix,
+      limit: 1000,
+      ...(cursor ? { cursor } : {})
+    });
+    const objects = Array.isArray(listed?.objects) ? listed.objects : [];
+    for (const item of objects) {
+      const key = String(item?.key || item?.name || '');
+      if (!key) continue;
+      await bucket.delete(key);
+    }
+    if (!listed?.truncated) break;
+    const next = String(listed?.cursor || '');
+    if (!next || next === cursor) break;
+    cursor = next;
+  }
+}
+
+async function handlePackageRevisionWrite(request, env, pkgName) {
+  const auth = await authenticateRequest(request, env, {
+    scope: 'write',
+    path: `${pkgName}:-rev`,
+    packageName: pkgName
+  });
+  if (!auth.ok) return auth.response;
+
+  const { bindingName, bucket } = getBucket(env);
+  if (!isR2BucketLike(bucket)) {
+    return internalError(`Missing R2 binding ${bindingName}`);
+  }
+  const currentMeta = await readMeta(bucket, pkgName);
+
+  const body = await parseJsonBody(request);
+  if (!body || typeof body !== 'object') {
+    return badRequest('invalid_json');
+  }
+  const payloadName = normalizePackageName(body.name || body._id || pkgName);
+  if (payloadName && payloadName !== pkgName) {
+    return badRequest('package_name_mismatch');
+  }
+
+  const nextMeta = {
+    _id: pkgName,
+    name: pkgName,
+    'dist-tags': body['dist-tags'] && typeof body['dist-tags'] === 'object'
+      ? body['dist-tags']
+      : {},
+    versions: body.versions && typeof body.versions === 'object'
+      ? body.versions
+      : {},
+    time: body.time && typeof body.time === 'object'
+      ? body.time
+      : {}
+  };
+  nextMeta.time.modified = new Date().toISOString();
+
+  const currentVersions = Object.keys(currentMeta?.versions || {});
+  const nextVersions = new Set(Object.keys(nextMeta.versions || {}));
+  const removedVersions = currentVersions.filter((version) => !nextVersions.has(version));
+  if (removedVersions.length && !hasR2Delete(bucket)) {
+    return internalError(`R2 binding ${bindingName} does not support delete()`);
+  }
+
+  await writeMeta(bucket, pkgName, nextMeta);
+  for (const version of removedVersions) {
+    await bucket.delete(tarballKey(pkgName, version));
+  }
+  return json({
+    ok: true,
+    name: pkgName,
+    rev: nextMeta._rev,
+    removed_tarballs: removedVersions.length
+  });
+}
+
+async function handlePackageRevisionDelete(request, env, pkgName) {
+  const auth = await authenticateRequest(request, env, {
+    scope: 'write',
+    path: `${pkgName}:-rev-delete`,
+    packageName: pkgName
+  });
+  if (!auth.ok) return auth.response;
+
+  const { bindingName, bucket } = getBucket(env);
+  if (!isR2BucketLike(bucket)) {
+    return internalError(`Missing R2 binding ${bindingName}`);
+  }
+  if (!hasR2Delete(bucket)) {
+    return internalError(`R2 binding ${bindingName} does not support delete()`);
+  }
+
+  const meta = await readMeta(bucket, pkgName);
+  if (!meta) return notFound();
+
+  await bucket.delete(metaKey(pkgName));
+  await deleteTarballsByPrefix(bucket, `tarballs/${encodeURIComponent(pkgName)}/`);
+  return json({ ok: true, name: pkgName, package_deleted: true });
+}
+
+async function handleTarballRevisionDelete(request, env, pkgName, version) {
+  const auth = await authenticateRequest(request, env, {
+    scope: 'write',
+    path: `${pkgName}@${version}:-rev-delete`,
+    packageName: pkgName
+  });
+  if (!auth.ok) return auth.response;
+
+  const { bindingName, bucket } = getBucket(env);
+  if (!isR2BucketLike(bucket)) {
+    return internalError(`Missing R2 binding ${bindingName}`);
+  }
+  if (!hasR2Delete(bucket)) {
+    return internalError(`R2 binding ${bindingName} does not support delete()`);
+  }
+
+  await bucket.delete(tarballKey(pkgName, version));
+  return json({ ok: true, name: pkgName, removed_version: version });
 }
 
 async function handlePublish(request, env, pkgName) {
@@ -797,6 +1078,57 @@ async function handleDistTagUpdate(request, env, pkgName, tag) {
   const result = await applyDistTag(bucket, pkgName, tag, version);
   if (!result.ok) return result.response;
   return json(result.tags);
+}
+
+async function handleDistTagList(request, env, pkgName) {
+  const auth = await authenticateRequest(request, env, {
+    scope: 'read',
+    path: `${pkgName}:dist-tags`,
+    packageName: pkgName
+  });
+  if (!auth.ok) return auth.response;
+
+  const { bindingName, bucket } = getBucket(env);
+  if (!isR2BucketLike(bucket)) {
+    return internalError(`Missing R2 binding ${bindingName}`);
+  }
+
+  const meta = await readMeta(bucket, pkgName);
+  if (!meta) {
+    return notFound();
+  }
+  return json(meta['dist-tags'] || {});
+}
+
+async function handleDistTagDelete(request, env, pkgName, tag) {
+  const auth = await authenticateRequest(request, env, {
+    scope: 'write',
+    path: `${pkgName}:dist-tag:${tag}`,
+    packageName: pkgName
+  });
+  if (!auth.ok) return auth.response;
+
+  const { bindingName, bucket } = getBucket(env);
+  if (!isR2BucketLike(bucket)) {
+    return internalError(`Missing R2 binding ${bindingName}`);
+  }
+
+  const meta = await readMeta(bucket, pkgName);
+  if (!meta) return notFound();
+  if (!meta['dist-tags'] || !(tag in meta['dist-tags'])) {
+    return notFound();
+  }
+
+  delete meta['dist-tags'][tag];
+  if (!meta['dist-tags'].latest) {
+    const fallback = pickNewestVersion(meta.versions);
+    if (fallback) meta['dist-tags'].latest = fallback;
+  }
+  if (!meta.time) meta.time = {};
+  meta.time.modified = new Date().toISOString();
+
+  await writeMeta(bucket, pkgName, meta);
+  return json(meta['dist-tags']);
 }
 
 async function handleAdminListPackages(request, env) {
@@ -1174,13 +1506,51 @@ async function executeRequest(request, env) {
   }
 
   const distTag = parseDistTagRoute(pathname);
-  if (distTag && request.method === 'PUT') {
-    return handleDistTagUpdate(request, env, distTag.pkgName, distTag.tag);
+  if (distTag) {
+    if (request.method === 'GET' && !distTag.tag) {
+      return handleDistTagList(request, env, distTag.pkgName);
+    }
+    if (request.method === 'PUT' && distTag.tag) {
+      return handleDistTagUpdate(request, env, distTag.pkgName, distTag.tag);
+    }
+    if (request.method === 'DELETE' && distTag.tag) {
+      return handleDistTagDelete(request, env, distTag.pkgName, distTag.tag);
+    }
+    return json({ error: 'method_not_allowed' }, 405);
+  }
+
+  const packageRev = parsePackageRevisionRoute(pathname);
+  if (packageRev) {
+    if (request.method === 'PUT') {
+      return handlePackageRevisionWrite(request, env, packageRev.pkgName);
+    }
+    if (request.method === 'DELETE') {
+      return handlePackageRevisionDelete(request, env, packageRev.pkgName);
+    }
+    return json({ error: 'method_not_allowed' }, 405);
+  }
+
+  const tarballRev = parseTarballRevisionRoute(pathname);
+  if (tarballRev) {
+    if (request.method === 'DELETE') {
+      return handleTarballRevisionDelete(request, env, tarballRev.pkgName, tarballRev.version);
+    }
+    return json({ error: 'method_not_allowed' }, 405);
   }
 
   const tarball = parseTarballRoute(pathname);
-  if (tarball && request.method === 'GET') {
+  if (tarball && (request.method === 'GET' || request.method === 'HEAD')) {
     return handleGetTarball(request, env, tarball.pkgName, tarball.version);
+  }
+  const canonicalTarball = parseCanonicalTarballRoute(pathname);
+  if (canonicalTarball && (request.method === 'GET' || request.method === 'HEAD')) {
+    return handleGetTarball(
+      request,
+      env,
+      canonicalTarball.pkgName,
+      canonicalTarball.version,
+      { upstreamPath: canonicalTarball.upstreamPath }
+    );
   }
 
   const pkgName = parsePackageNameFromPath(pathname);

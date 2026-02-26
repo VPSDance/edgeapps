@@ -52,4 +52,14 @@ pnpm -F npm-registry release
 
 > 首次发布前请在 Cloudflare Pages 配置 `NPM_BUCKET`（R2）与 `AUTH_KV`（KV）绑定.
 
+## Smoke 测试
+
+```bash
+cp apps/gh-proxy/scripts/gh-proxy-smoke.env.example ./gh-proxy-smoke.env
+bash apps/gh-proxy/scripts/gh-proxy-smoke.sh
+
+cp apps/npm-registry/scripts/npm-registry-smoke.env.example ./npm-registry-smoke.env
+bash apps/npm-registry/scripts/npm-registry-smoke.sh
+```
+
 详细的部署与配置请查看各应用的 README.

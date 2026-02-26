@@ -52,4 +52,14 @@ pnpm -F npm-registry release
 
 > Configure `NPM_BUCKET` (R2) + `AUTH_KV` (KV) bindings in Cloudflare Pages before first release.
 
+## Smoke tests
+
+```bash
+cp apps/gh-proxy/scripts/gh-proxy-smoke.env.example ./gh-proxy-smoke.env
+bash apps/gh-proxy/scripts/gh-proxy-smoke.sh
+
+cp apps/npm-registry/scripts/npm-registry-smoke.env.example ./npm-registry-smoke.env
+bash apps/npm-registry/scripts/npm-registry-smoke.sh
+```
+
 See each app's README for detailed deployment and configuration.

@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-PARENT=$(cd "$ROOT/.." && pwd)
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+APP_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+WORKSPACE_DIR=$(cd "$APP_DIR/../.." && pwd)
+REPO_DIR=$(cd "$WORKSPACE_DIR/.." && pwd)
 
 load_env() {
   local file="$1"
@@ -14,8 +16,9 @@ load_env() {
   fi
 }
 
-load_env "$PARENT/gh-proxy-smoke.env"
-load_env "$ROOT/gh-proxy-smoke.env"
+load_env "$REPO_DIR/gh-proxy-smoke.env"
+load_env "$WORKSPACE_DIR/gh-proxy-smoke.env"
+load_env "$APP_DIR/gh-proxy-smoke.env"
 
 PASS=0
 FAIL=0

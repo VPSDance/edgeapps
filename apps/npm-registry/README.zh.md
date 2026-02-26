@@ -26,8 +26,13 @@ Languages: [English](README.md) | [中文](README.zh.md)
 - `GET /_/admin`（管理页，需要 HTTP Basic 认证）
 - `GET /<package>`
 - `PUT /<package>`
+- `PUT /<package>/-rev/<rev>`（npm unpublish 时更新 packument）
+- `DELETE /<package>/-rev/<rev>`（npm unpublish 整包删除）
 - `GET /-/tarballs/<encoded-package>/<version>.tgz`
+- `DELETE /-/tarballs/<encoded-package>/<version>.tgz/-rev/<rev>`（npm unpublish 删除 tarball）
+- `GET /-/package/<encoded-package>/dist-tags`
 - `PUT /-/package/<encoded-package>/dist-tags/<tag>`
+- `DELETE /-/package/<encoded-package>/dist-tags/<tag>`
 
 ## 构建
 
@@ -50,6 +55,20 @@ pnpm release
 
 发布脚本必需变量（`npm-registry.env`）:
 - `CF_NAME`, `CF_TOKEN`, `CF_ACCOUNT`
+
+## Smoke 测试
+
+执行命令见仓库根 README: [`../../README.zh.md`](../../README.zh.md)。
+
+写路径行为:
+- 默认: 自动发布临时包，执行 publish + dist-tag + unpublish 检查
+- 若 `NPM_REGISTRY_TOKEN` 同时具备读写 ACL，一个 token 就够
+- `NPM_REGISTRY_WRITE_TOKEN` 只是写路径检查的可选覆盖
+- 必填: `NPM_REGISTRY_WRITE_TEST_PACKAGE`（写路径测试用包名）
+- 示例（任选一种）:
+  - scoped: `@your-scope/smoke`
+  - 非 scoped: `your-team-smoke`
+- 必填: `NPM_REGISTRY_READ_TEST_PACKAGE`（读路径测试用包名）
 
 ## Cloudflare 配置
 
@@ -77,6 +96,12 @@ pnpm release
 ]
 ```
 Token 生成: `openssl rand -hex 16`（推荐: `openssl rand -hex 32`）。
+
+ACL 规则语法:
+- 精确匹配: 不含 `*`，例如 `@team/pkg-a`
+- 通配匹配: `*` 表示任意子串，例如 `@team/*`、`xxx-*`、`*`
+- 若未配置 `read` 但配置了 `write`: `read` 会默认等于 `write`
+- 若 `read` 和 `write` 都未配置: `read` 默认 `*`，`write` 为空
 
 重发同版本行为:
 - 默认（`NPM_ALLOW_REPUBLISH=true`）: 允许覆盖已有版本（类似 Nexus）。

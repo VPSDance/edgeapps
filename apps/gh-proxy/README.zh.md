@@ -48,6 +48,14 @@ pnpm release
 - `--skip-build`（仅部署已有 dist；`pnpm release -- --skip-build`）
 - `-o cf|eo`（只发布单一目标；`cf`=Cloudflare，`eo`=EdgeOne；`pnpm release -- -o cf`）
 
+## Smoke 测试
+
+执行命令见仓库根 README: [`../../README.zh.md`](../../README.zh.md)。
+
+Smoke 变量说明:
+- 必填: `GH_PROXY_HOSTS`、公共仓库字段、gist 字段、user-attachments 字段。
+- 可选: `GH_PROXY_BASIC`（basic auth 路由测试）、`GH_PROXY_TOKEN` + `GH_PROXY_PRIVATE_*`（私有 raw/clone 测试）。
+
 ## 配置
 
 必需:

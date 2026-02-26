@@ -26,8 +26,13 @@ This app is currently **Cloudflare-only**.
 - `GET /_/admin` (admin UI, HTTP Basic auth)
 - `GET /<package>`
 - `PUT /<package>`
+- `PUT /<package>/-rev/<rev>` (npm unpublish packument update)
+- `DELETE /<package>/-rev/<rev>` (npm unpublish whole package)
 - `GET /-/tarballs/<encoded-package>/<version>.tgz`
+- `DELETE /-/tarballs/<encoded-package>/<version>.tgz/-rev/<rev>` (npm unpublish tarball delete)
+- `GET /-/package/<encoded-package>/dist-tags`
 - `PUT /-/package/<encoded-package>/dist-tags/<tag>`
+- `DELETE /-/package/<encoded-package>/dist-tags/<tag>`
 
 ## Build
 
@@ -50,6 +55,20 @@ pnpm release
 
 Required env for release script (`npm-registry.env`):
 - `CF_NAME`, `CF_TOKEN`, `CF_ACCOUNT`
+
+## Smoke test
+
+Run commands from the repo root README: [`../../README.md`](../../README.md).
+
+Write-path behavior:
+- Default: auto publish a temporary package, run publish + dist-tag + unpublish checks
+- Single token is enough if it has both read/write ACL (`NPM_REGISTRY_TOKEN`)
+- `NPM_REGISTRY_WRITE_TOKEN` is optional override for write-path checks
+- Required: `NPM_REGISTRY_WRITE_TEST_PACKAGE` (package name for write-path tests)
+- Examples (pick one):
+  - scoped: `@your-scope/smoke`
+  - unscoped: `your-team-smoke`
+- Required: `NPM_REGISTRY_READ_TEST_PACKAGE` (package name for read-path checks)
 
 ## Cloudflare Config
 
@@ -77,6 +96,12 @@ Variables and Secrets:
 ]
 ```
 Token: `openssl rand -hex 16` (recommended: `openssl rand -hex 32`).
+
+ACL rule syntax:
+- Exact match: no `*`, e.g. `@team/pkg-a`
+- Wildcard: `*` matches any substring, e.g. `@team/*`, `xxx-*`, `*`
+- If `read` is omitted but `write` exists: `read` defaults to `write`
+- If both `read` and `write` are omitted: `read` defaults to `*` and `write` is empty
 
 Republish behavior:
 - Default (`NPM_ALLOW_REPUBLISH=true`): existing version can be overwritten (Nexus-like behavior).

@@ -48,6 +48,14 @@ Release options:
 - `--skip-build` (deploy existing dist only; use `pnpm release -- --skip-build`)
 - `-o cf|eo` (publish a single target; `cf` = Cloudflare, `eo` = EdgeOne; use `pnpm release -- -o cf`)
 
+## Smoke test
+
+Run commands from the repo root README: [`../../README.md`](../../README.md).
+
+Smoke env notes:
+- Required: `GH_PROXY_HOSTS`, public repo fields, gist fields, and user-attachments fields.
+- Optional: `GH_PROXY_BASIC` (basic auth route test), `GH_PROXY_TOKEN` + `GH_PROXY_PRIVATE_*` (private raw/clone tests).
+
 ## Config
 
 Required:
