@@ -17,6 +17,19 @@ test('normalizeKvKeys supports multiple key field names', () => {
   assert.deepEqual(out, ['a', 'b', 'c', 'd', 'e']);
 });
 
+test('normalizeKvKeys supports objects fallback field', () => {
+  const out = normalizeKvKeys({
+    objects: [
+      { name: 'o1' },
+      { key: 'o2' },
+      { Key: 'o3' },
+      { id: 'o4' },
+      'o5'
+    ]
+  });
+  assert.deepEqual(out, ['o1', 'o2', 'o3', 'o4', 'o5']);
+});
+
 test('listKvKeys paginates with cursor and complete fields', async () => {
   const calls = [];
   const kv = {

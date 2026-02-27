@@ -12,7 +12,17 @@ import {
 import { serveCloudflareStaticAsset } from '@edgeapps/core/static-assets';
 import {
   authorizeToken,
-  getAclSummary
+  createManagedToken,
+  deleteManagedToken,
+  getAclSummary,
+  hasAuthKvBinding,
+  isAccountAdmin,
+  isAccountAuthorized,
+  isAuthConfigured,
+  isPatternSubset,
+  listManagedTokens,
+  reissueManagedToken,
+  updateManagedToken
 } from './accounts.js';
 import { APP_NAME, PLATFORM_CF } from '../meta.js';
 import validSemver from 'semver/functions/valid.js';
@@ -20,12 +30,17 @@ import rcompareSemver from 'semver/functions/rcompare.js';
 
 const STATUS_PATH = '/_/status';
 const ADMIN_PATH = '/_/admin';
-const LOGIN_PATH = '/login';
 const ADMIN_API_WHOAMI = '/_/api/admin/whoami';
 const ADMIN_API_PACKAGES = '/_/api/admin/packages';
 const ADMIN_API_PACKAGE = '/_/api/admin/package';
 const ADMIN_API_DIST_TAG = '/_/api/admin/dist-tag';
 const ADMIN_API_DELETE_VERSION = '/_/api/admin/delete-version';
+const ADMIN_API_TOKENS = '/_/api/admin/tokens';
+const ADMIN_API_TOKEN_CREATE = '/_/api/admin/token-create';
+const ADMIN_API_TOKEN_UPDATE = '/_/api/admin/token-update';
+const ADMIN_API_TOKEN_ROTATE = '/_/api/admin/token-rotate';
+const ADMIN_API_TOKEN_REISSUE = '/_/api/admin/token-reissue';
+const ADMIN_API_TOKEN_DELETE = '/_/api/admin/token-delete';
 const PING_PATH = '/-/ping';
 const WHOAMI_PATH = '/-/whoami';
 const LEGACY_LOGIN_PREFIX = '/-/user/org.couchdb.user:';
@@ -154,10 +169,6 @@ function parseAuthCredentials(request) {
       token: ''
     };
   }
-}
-
-function extractBearerOrBasicToken(request) {
-  return parseAuthCredentials(request).token;
 }
 
 function isR2BucketLike(value) {
@@ -629,11 +640,10 @@ async function authenticateRequest(request, env, {
   tokenOverride,
   challenge = 'bearer'
 } = {}) {
-  const acl = getAclSummary(env);
-  if (!acl.enabled) {
+  if (!isAuthConfigured(env)) {
     return {
       ok: false,
-      response: internalError('Missing env NPM_ACCOUNTS_JSON')
+      response: internalError('Missing auth config: set NPM_ACCOUNTS_JSON or bind NPM_AUTH_KV')
     };
   }
   if (!isKvStore(env?.AUTH_KV)) {
@@ -658,7 +668,7 @@ async function authenticateRequest(request, env, {
         }
       : parseAuthCredentials(request);
   const token = creds.token;
-  const authz = authorizeToken(env, { token, scope, packageName });
+  const authz = await authorizeToken(env, { token, scope, packageName });
   if (!authz.ok) {
     if (token && authz.reason !== 'missing_token') {
       const updated = await recordAuthEvent(env, {
@@ -703,6 +713,7 @@ async function authenticateRequest(request, env, {
   return {
     ok: true,
     account: authz.account || null,
+    source: authz.source || 'env',
     token
   };
 }
@@ -759,7 +770,7 @@ async function handleStatus(request, env) {
   const { bindingName, bucket } = getBucket(env);
   const ip = getClientIp(request);
   const rec = await getAuthRecord(env, ip);
-  const acl = getAclSummary(env);
+  const acl = await getAclSummary(env);
   return json({
     ok: true,
     app: APP_NAME,
@@ -792,7 +803,310 @@ async function handleAdminWhoAmI(request, env) {
     challenge: 'basic'
   });
   if (!auth.ok) return auth.response;
-  return json({ username: String(auth?.account?.username || 'npm-user') });
+  const access = await resolveTokenManagementAccess(env, auth);
+  const authSource = String(auth?.source || 'env');
+  return json({
+    username: String(auth?.account?.username || 'npm-user'),
+    auth_source: authSource,
+    token_management: Boolean(access?.ok && access?.enabled),
+    token_management_reason: String(access?.reason || ''),
+    is_admin: isAccountAdmin(auth?.account)
+  });
+}
+
+function parsePatternInput(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item || '').trim())
+      .filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+async function resolveTokenManagementAccess(env, auth) {
+  const source = String(auth?.source || 'env');
+  if (!hasAuthKvBinding(env)) {
+    return {
+      ok: true,
+      enabled: false,
+      source,
+      reason: 'NPM_AUTH_KV_not_configured'
+    };
+  }
+  if (!isAccountAdmin(auth?.account)) {
+    return {
+      ok: true,
+      enabled: false,
+      source,
+      reason: 'admin_required'
+    };
+  }
+  return {
+    ok: true,
+    enabled: true,
+    source,
+    reason: ''
+  };
+}
+
+async function handleAdminListTokens(request, env) {
+  const auth = await authenticateRequest(request, env, {
+    scope: 'read',
+    path: '_/api/admin/tokens',
+    challenge: 'basic'
+  });
+  if (!auth.ok) return auth.response;
+
+  const access = await resolveTokenManagementAccess(env, auth);
+  if (!access.ok) {
+    return internalError(access.reason || 'token_access_check_failed');
+  }
+  if (!access.enabled) {
+    return json({
+      ok: true,
+      enabled: false,
+      source: access.source,
+      reason: access.reason || '',
+      items: []
+    });
+  }
+
+  const username = String(auth?.account?.username || '').trim();
+  const listed = await listManagedTokens(env, {
+    username: isAccountAdmin(auth?.account) ? '' : username
+  });
+  if (!listed.ok) {
+    return internalError(listed.reason || 'token_list_failed');
+  }
+  return json({
+    ok: true,
+    enabled: true,
+    source: access.source,
+    is_admin: isAccountAdmin(auth?.account),
+    username,
+    items: listed.items || []
+  });
+}
+
+async function handleAdminCreateToken(request, env) {
+  const auth = await authenticateRequest(request, env, {
+    scope: 'write',
+    path: '_/api/admin/token-create',
+    challenge: 'basic'
+  });
+  if (!auth.ok) return auth.response;
+  const access = await resolveTokenManagementAccess(env, auth);
+  if (!access.ok) {
+    return internalError(access.reason || 'token_access_check_failed');
+  }
+  if (!access.enabled) {
+    if (access.reason === 'NPM_AUTH_KV_not_configured') {
+      return badRequest('NPM_AUTH_KV_not_configured');
+    }
+    return forbidden(access.reason || 'forbidden');
+  }
+
+  const owner = String(auth?.account?.username || '').trim();
+  if (!owner) return internalError('missing_authenticated_user');
+  const actorIsAdmin = isAccountAdmin(auth?.account);
+
+  const body = await parseJsonBody(request);
+  if (!body) return badRequest('invalid_json');
+
+  const username = String(body.username || owner).trim();
+  if (!username) return badRequest('missing_username');
+  if (!actorIsAdmin && username !== owner) {
+    return forbidden('cross_user_token_forbidden');
+  }
+
+  const hasRead = Object.prototype.hasOwnProperty.call(body, 'read');
+  const hasWrite = Object.prototype.hasOwnProperty.call(body, 'write');
+  const hasAdmin = Object.prototype.hasOwnProperty.call(body, 'is_admin') || Object.prototype.hasOwnProperty.call(body, 'admin');
+  const ownerRead = auth?.account?.read || [];
+  const ownerWrite = auth?.account?.write || [];
+  const baseRead = actorIsAdmin ? ['*'] : ownerRead;
+  const baseWrite = actorIsAdmin ? [] : ownerWrite;
+  const readInput = hasRead ? parsePatternInput(body.read) : null;
+  const writeInput = hasWrite ? parsePatternInput(body.write) : null;
+  const write = writeInput !== null ? writeInput : baseWrite;
+  const read =
+    readInput !== null
+      ? (readInput.length ? readInput : (write.length ? [...write] : ['*']))
+      : writeInput !== null
+        ? (write.length ? [...write] : ['*'])
+        : baseRead;
+  const isAdminToken =
+    actorIsAdmin
+      ? (hasAdmin
+        ? (body.is_admin === true || body.admin === true)
+        : username === owner)
+      : false;
+
+  if (!actorIsAdmin && !isPatternSubset(read, ownerRead)) {
+    return forbidden('read_acl_out_of_scope');
+  }
+  if (!actorIsAdmin && !isPatternSubset(write, ownerWrite)) {
+    return forbidden('write_acl_out_of_scope');
+  }
+
+  const created = await createManagedToken(env, {
+    username,
+    read,
+    write,
+    isAdmin: isAdminToken
+  });
+  if (!created.ok) {
+    return badRequest(created.reason || 'token_create_failed');
+  }
+  return json({
+    ok: true,
+    token: created.token,
+    item: created.item
+  }, 201);
+}
+
+async function handleAdminDeleteToken(request, env) {
+  const auth = await authenticateRequest(request, env, {
+    scope: 'write',
+    path: '_/api/admin/token-delete',
+    challenge: 'basic'
+  });
+  if (!auth.ok) return auth.response;
+  const access = await resolveTokenManagementAccess(env, auth);
+  if (!access.ok) {
+    return internalError(access.reason || 'token_access_check_failed');
+  }
+  if (!access.enabled) {
+    if (access.reason === 'NPM_AUTH_KV_not_configured') {
+      return badRequest('NPM_AUTH_KV_not_configured');
+    }
+    return forbidden(access.reason || 'forbidden');
+  }
+
+  const owner = String(auth?.account?.username || '').trim();
+  if (!owner) return internalError('missing_authenticated_user');
+  const actorIsAdmin = isAccountAdmin(auth?.account);
+
+  const body = await parseJsonBody(request);
+  if (!body) return badRequest('invalid_json');
+  const tokenId = String(body.token_id || '').trim();
+  if (!tokenId) return badRequest('missing_token_id');
+
+  const deleted = await deleteManagedToken(env, {
+    tokenId,
+    username: actorIsAdmin ? '' : owner
+  });
+  if (!deleted.ok) {
+    if (deleted.reason === 'token_not_found') return notFound();
+    return badRequest(deleted.reason || 'token_delete_failed');
+  }
+  return json({
+    ok: true,
+    token_id: tokenId
+  });
+}
+
+async function handleAdminUpdateToken(request, env) {
+  const auth = await authenticateRequest(request, env, {
+    scope: 'write',
+    path: '_/api/admin/token-update',
+    challenge: 'basic'
+  });
+  if (!auth.ok) return auth.response;
+  const access = await resolveTokenManagementAccess(env, auth);
+  if (!access.ok) {
+    return internalError(access.reason || 'token_access_check_failed');
+  }
+  if (!access.enabled) {
+    if (access.reason === 'NPM_AUTH_KV_not_configured') {
+      return badRequest('NPM_AUTH_KV_not_configured');
+    }
+    return forbidden(access.reason || 'forbidden');
+  }
+
+  const body = await parseJsonBody(request);
+  if (!body) return badRequest('invalid_json');
+  const tokenId = String(body.token_id || '').trim();
+  if (!tokenId) return badRequest('missing_token_id');
+
+  const hasRead = Object.prototype.hasOwnProperty.call(body, 'read');
+  const hasWrite = Object.prototype.hasOwnProperty.call(body, 'write');
+  const hasAdmin =
+    Object.prototype.hasOwnProperty.call(body, 'is_admin') ||
+    Object.prototype.hasOwnProperty.call(body, 'admin');
+
+  const read = hasRead ? parsePatternInput(body.read) : undefined;
+  const write = hasWrite ? parsePatternInput(body.write) : undefined;
+  const isAdminToken = hasAdmin
+    ? (body.is_admin === true || body.admin === true)
+    : undefined;
+
+  if (hasRead && !isAdminToken && !read.length && hasWrite && !write.length) {
+    return badRequest('missing_read_write_rules');
+  }
+
+  const updated = await updateManagedToken(env, {
+    tokenId,
+    read,
+    write,
+    isAdmin: isAdminToken
+  });
+  if (!updated.ok) {
+    if (updated.reason === 'token_not_found') return notFound();
+    return badRequest(updated.reason || 'token_update_failed');
+  }
+
+  return json({
+    ok: true,
+    item: updated.item
+  });
+}
+
+async function handleAdminReissueToken(request, env) {
+  const auth = await authenticateRequest(request, env, {
+    scope: 'write',
+    path: '_/api/admin/token-rotate',
+    challenge: 'basic'
+  });
+  if (!auth.ok) return auth.response;
+  const access = await resolveTokenManagementAccess(env, auth);
+  if (!access.ok) {
+    return internalError(access.reason || 'token_access_check_failed');
+  }
+  if (!access.enabled) {
+    if (access.reason === 'NPM_AUTH_KV_not_configured') {
+      return badRequest('NPM_AUTH_KV_not_configured');
+    }
+    return forbidden(access.reason || 'forbidden');
+  }
+
+  const body = await parseJsonBody(request);
+  if (!body) return badRequest('invalid_json');
+  const tokenId = String(body.token_id || '').trim();
+  if (!tokenId) return badRequest('missing_token_id');
+  const replaceOld = body.replace_old !== false;
+
+  const result = await reissueManagedToken(env, {
+    tokenId,
+    replaceOld
+  });
+  if (!result.ok) {
+    if (result.reason === 'token_not_found') return notFound();
+    return badRequest(result.reason || 'token_reissue_failed');
+  }
+  return json({
+    ok: true,
+    token: result.token,
+    item: result.item,
+    old_token_id: result.old_token_id,
+    replaced: result.replaced
+  }, 201);
 }
 
 async function handlePing(request, env) {
@@ -1301,18 +1615,15 @@ async function handleAdminListPackages(request, env) {
     ...(cursor ? { cursor } : {})
   });
   const objects = Array.isArray(listed?.objects) ? listed.objects : [];
-  const token = extractBearerOrBasicToken(request);
+  const currentAccount = auth?.account || null;
   const names = objects
     .map((item) => packageNameFromMetaKey(item?.key || item?.name))
     .filter(Boolean)
     .filter((name) => !keyword || name.toLowerCase().includes(keyword))
-    .filter((name) =>
-      authorizeToken(env, {
-        token,
-        scope: 'read',
-        packageName: name
-      }).ok
-    );
+    .filter((name) => isAccountAuthorized(currentAccount, {
+      scope: 'read',
+      packageName: name
+    }));
 
   const items = (
     await Promise.all(
@@ -1351,13 +1662,10 @@ async function handleAdminListPackages(request, env) {
               if (keyword && !name.toLowerCase().includes(keyword)) {
                 continue;
               }
-              if (
-                authorizeToken(env, {
-                  token,
-                  scope: 'read',
-                  packageName: name
-                }).ok
-              ) {
+              if (isAccountAuthorized(currentAccount, {
+                scope: 'read',
+                packageName: name
+              })) {
                 totalVisible += 1;
               }
             }
@@ -1585,14 +1893,6 @@ async function executeRequest(request, env) {
   if (pathname === '/' && request.method === 'GET') {
     return landing();
   }
-  if (pathname === LOGIN_PATH && request.method === 'GET') {
-    return new Response(null, {
-      status: 302,
-      headers: {
-        location: ADMIN_PATH
-      }
-    });
-  }
   if ((pathname === ADMIN_PATH || pathname.startsWith(`${ADMIN_PATH}/`)) && request.method === 'GET') {
     const auth = await authenticateRequest(request, env, {
       scope: 'read',
@@ -1632,6 +1932,24 @@ async function executeRequest(request, env) {
   }
   if (pathname === ADMIN_API_DELETE_VERSION && request.method === 'POST') {
     return handleAdminDeleteVersion(request, env);
+  }
+  if (pathname === ADMIN_API_TOKENS && request.method === 'GET') {
+    return handleAdminListTokens(request, env);
+  }
+  if (pathname === ADMIN_API_TOKEN_CREATE && request.method === 'POST') {
+    return handleAdminCreateToken(request, env);
+  }
+  if (pathname === ADMIN_API_TOKEN_UPDATE && request.method === 'POST') {
+    return handleAdminUpdateToken(request, env);
+  }
+  if (pathname === ADMIN_API_TOKEN_ROTATE && request.method === 'POST') {
+    return handleAdminReissueToken(request, env);
+  }
+  if (pathname === ADMIN_API_TOKEN_REISSUE && request.method === 'POST') {
+    return handleAdminReissueToken(request, env);
+  }
+  if (pathname === ADMIN_API_TOKEN_DELETE && request.method === 'POST') {
+    return handleAdminDeleteToken(request, env);
   }
   if (pathname === PING_PATH && request.method === 'GET') {
     return handlePing(request, env);

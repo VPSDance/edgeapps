@@ -8,7 +8,11 @@ export function isKvStore(store) {
 }
 
 export function normalizeKvKeys(listRes) {
-  const keysRaw = Array.isArray(listRes?.keys) ? listRes.keys : [];
+  const keysRaw = Array.isArray(listRes?.keys)
+    ? listRes.keys
+    : Array.isArray(listRes?.objects)
+      ? listRes.objects
+      : [];
   return keysRaw
     .map((k) => {
       if (typeof k === 'string') return k;

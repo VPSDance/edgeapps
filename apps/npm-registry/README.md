@@ -9,7 +9,7 @@ Private npm registry for Cloudflare Pages with R2 object storage.
 - `npm install` / `npm view` (metadata + tarball download)
 - `npm publish` (single/multi-version payload with `_attachments`)
 - `npm dist-tag add|rm` compatible tag update endpoint
-- Token auth via `NPM_ACCOUNTS_JSON` (per-account, per-package ACL)
+- Token auth via `NPM_AUTH_KV` (dynamic) or `NPM_ACCOUNTS_JSON` (static)
 - Upstream fallback for public packages (`https://registry.npmjs.org`)
 - Auth fail stats + auto-ban via `AUTH_KV`
 - Public landing at `/`, admin UI at `/_/admin` (package list, dist-tag update, delete version)
@@ -18,14 +18,14 @@ This app is currently **Cloudflare-only**.
 
 ## Endpoints
 
+Public routes:
+- `GET /` (public landing page)
+
+npm-compatible routes:
 - `GET /-/ping`
 - `GET /-/whoami`
 - `POST /-/npm/v1/security/advisories/bulk` (npm audit passthrough)
 - `POST /-/npm/v1/security/audits/quick` (npm audit passthrough)
-- `GET /_/status`
-- `GET /` (public landing page)
-- `GET /login` (redirect to `/_/admin`)
-- `GET /_/admin` (admin UI, HTTP Basic auth)
 - `GET /<package>`
 - `PUT /<package>`
 - `PUT /<package>/-rev/<rev>` (npm unpublish packument update)
@@ -35,6 +35,15 @@ This app is currently **Cloudflare-only**.
 - `GET /-/package/<encoded-package>/dist-tags`
 - `PUT /-/package/<encoded-package>/dist-tags/<tag>`
 - `DELETE /-/package/<encoded-package>/dist-tags/<tag>`
+
+Private admin routes:
+- `GET /_/status`
+- `GET /_/admin` (admin UI, HTTP Basic auth)
+- `GET /_/api/admin/tokens` (list own tokens, KV mode)
+- `POST /_/api/admin/token-create` (create token, KV mode)
+- `POST /_/api/admin/token-update` (update token ACL/admin role, KV mode)
+- `POST /_/api/admin/token-rotate` (generate new token and invalidate old token, KV mode)
+- `POST /_/api/admin/token-delete` (delete token, KV mode)
 
 ## Build
 
@@ -75,7 +84,7 @@ Write-path behavior:
 ## Cloudflare Config
 
 Variables and Secrets:
-- `NPM_ACCOUNTS_JSON` (required)
+- `NPM_ACCOUNTS_JSON` (optional; env-account auth and fallback when KV token is not matched)
 - `NPM_UPSTREAM_REGISTRY` (optional, default: `https://registry.npmjs.org`)
 - `NPM_ALLOW_REPUBLISH` (optional, default: `true`)
 
@@ -86,8 +95,7 @@ Variables and Secrets:
   {
     "username": "alice",
     "token": "token_alice",
-    "read": ["*"],
-    "write": ["@team/*"]
+    "admin": true
   },
   {
     "username": "ci",
@@ -104,6 +112,7 @@ ACL rule syntax:
 - Wildcard: `*` matches any substring, e.g. `@team/*`, `xxx-*`, `*`
 - If `read` is omitted but `write` exists: `read` defaults to `write`
 - If both `read` and `write` are omitted: `read` defaults to `*` and `write` is empty
+- If `admin: true`: account/token is forced to full access (`read=["*"]`, `write=["*"]`)
 
 Republish behavior:
 - Default (`NPM_ALLOW_REPUBLISH=true`): existing version can be overwritten (Nexus-like behavior).
@@ -111,12 +120,20 @@ Republish behavior:
 
 Bindings:
 - R2: binding variable `NPM_BUCKET` -> your actual bucket (e.g. `npm-registry`)
+- KV: `NPM_AUTH_KV` (dynamic token storage for npm auth, optional)
 - KV: `AUTH_KV` (auth fail tracking + auto-ban)
+
+Auth source:
+- If `NPM_AUTH_KV` is bound: npm auth checks KV tokens (`npr_<tokenId>.<secret>`) first.
+- If KV does not match and `NPM_ACCOUNTS_JSON` exists: it is used as fallback (good for admin accounts).
+- If `NPM_AUTH_KV` is not bound: npm auth uses `NPM_ACCOUNTS_JSON` only.
+- Token management policy: only `admin: true` accounts can access token management (UI + API).
+- Token role default: new tokens are non-admin unless an admin explicitly creates them as admin.
 
 Admin UI auth:
 - Open `/_/admin` and sign in with HTTP Basic.
-- Username: `NPM_ACCOUNTS_JSON[].username`
-- Password: corresponding account `token`
+- Username: token owner username
+- Password: corresponding token
 
 ## npm client setup
 
