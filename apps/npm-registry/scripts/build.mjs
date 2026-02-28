@@ -187,7 +187,7 @@ function getPlugins() {
 
 function buildAdminSpa() {
   rmSync(distDir, { recursive: true, force: true });
-  run('pnpm', ['exec', 'rsbuild', 'build']);
+  run('pnpm', ['run', 'build:web']);
 
   rmSync(webDir, { recursive: true, force: true });
   cpSync(distDir, webDir, { recursive: true });

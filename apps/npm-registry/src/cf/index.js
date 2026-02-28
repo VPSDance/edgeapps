@@ -1465,6 +1465,7 @@ async function handlePublish(request, env, pkgName) {
       ...(manifest.dist || {}),
       shasum,
       integrity,
+      size: bytes.length,
       tarball: tarballPath(pkgName, version)
     };
 
@@ -1686,16 +1687,38 @@ async function handleAdminListPackages(request, env) {
   });
 }
 
-function buildAdminPackageDetail(pkgName, meta, origin) {
-  const versions = Object.entries(meta?.versions || {})
-    .map(([version, manifest]) => ({
-      version,
-      shasum: manifest?.dist?.shasum || '',
-      integrity: manifest?.dist?.integrity || '',
-      tarball: `${origin}${tarballPath(pkgName, version)}`,
-      time: meta?.time?.[version] || ''
-    }))
-    .sort((a, b) => compareVersionDesc(a.version, b.version));
+async function buildAdminPackageDetail(pkgName, meta, origin, bucket) {
+  const versions = await Promise.all(
+    Object.entries(meta?.versions || {}).map(async ([version, manifest]) => {
+      const rawSize = Number(manifest?.dist?.size);
+      let size = Number.isFinite(rawSize) && rawSize >= 0 ? rawSize : null;
+      if (size == null) {
+        try {
+          const object = await bucket.head(tarballKey(pkgName, version));
+          if (object && Number.isFinite(Number(object.size)) && Number(object.size) >= 0) {
+            size = Number(object.size);
+          }
+        } catch {
+          // ignore size fallback failure
+        }
+      }
+
+      const rawUnpackedSize = Number(manifest?.dist?.unpackedSize);
+      const unpackedSize =
+        Number.isFinite(rawUnpackedSize) && rawUnpackedSize >= 0 ? rawUnpackedSize : null;
+
+      return {
+        version,
+        shasum: manifest?.dist?.shasum || '',
+        integrity: manifest?.dist?.integrity || '',
+        tarball: `${origin}${tarballPath(pkgName, version)}`,
+        size,
+        unpackedSize,
+        time: meta?.time?.[version] || ''
+      };
+    })
+  );
+  versions.sort((a, b) => compareVersionDesc(a.version, b.version));
   return {
     name: pkgName,
     distTags: meta?.['dist-tags'] || {},
@@ -1723,7 +1746,7 @@ async function handleAdminGetPackage(request, env) {
   }
   const meta = await readMeta(bucket, pkgName);
   if (!meta) return notFound();
-  return json(buildAdminPackageDetail(pkgName, meta, urlObj.origin));
+  return json(await buildAdminPackageDetail(pkgName, meta, urlObj.origin, bucket));
 }
 
 async function handleAdminSetDistTag(request, env) {
@@ -1868,7 +1891,6 @@ function landing() {
     <main>
       <h1>Private npm registry</h1>
       <p>Cloudflare Pages + R2 storage.</p>
-      <p>Status endpoint: <code>/_/status</code></p>
       <p>Admin UI: <code>/_/admin</code></p>
       <p><a class="login" href="/_/admin">Login</a></p>
       <p>Ping endpoint: <code>/-/ping</code></p>
@@ -1914,7 +1936,6 @@ async function executeRequest(request, env) {
       }
     });
   }
-  if (pathname === '/favicon.ico') return new Response(null, { status: 404 });
   if (pathname === STATUS_PATH && request.method === 'GET') {
     return handleStatus(request, env);
   }
